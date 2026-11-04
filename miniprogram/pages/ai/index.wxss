@@ -37,3 +37,6 @@
 .chip{padding:12rpx 24rpx;border-radius:999rpx;background:#F1F5FC;color:#3D5372;font-size:25rpx;border:2rpx solid transparent}
 .chip-on{background:#E5ECFF;color:#2457D6;border-color:#2457D6;font-weight:600}
 .hint{margin-top:12rpx;font-size:23rpx;color:#526580;background:#F4F7FC;border-radius:10rpx;padding:12rpx 16rpx;line-height:1.6}
+
+.rich{max-width:100%;background:#fff;border-radius:18rpx;padding:10rpx 20rpx;box-sizing:border-box}
+.rich towxml{display:block}

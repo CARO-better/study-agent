@@ -5,7 +5,8 @@
     <view wx:if="{{!messages.length}}" class="empty">可以直接说「明天交高数作业，预计一小时」，也可以发一张课表或作业截图，我会整理成待办。</view>
     <view wx:for="{{messages}}" wx:key="index" class="msg {{item.role}}">
       <view wx:if="{{item.image}}" class="thumb"><image src="{{item.image}}" mode="widthFix"/></view>
-      <view wx:if="{{item.text}}" class="bubble">{{item.text}}</view>
+      <view wx:if="{{item.role === 'assistant' && item.nodes}}" class="rich"><towxml nodes="{{item.nodes}}"/></view>
+      <view wx:elif="{{item.text}}" class="bubble">{{item.text}}</view>
     </view>
     <view wx:if="{{sending}}" class="msg assistant"><view class="bubble thinking">正在处理…</view></view>
   </view>

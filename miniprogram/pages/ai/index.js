@@ -1,7 +1,17 @@
 const ai = require('../../lib/ai');
 const tools = require('../../lib/tools');
 const providers = require('../../lib/providers');
+const towxml = require('../../towxml/index');
 const KEY = 'study_trial_v1';
+
+// Markdown → WXML 节点；解析失败就退回纯文本，不要因为排版把整条消息吞掉。
+function render(text) {
+  try {
+    return towxml(String(text || ''), 'markdown');
+  } catch (error) {
+    return null;
+  }
+}
 
 function fresh() { return { courses: [], tasks: [], availability: [], blocks: [], unscheduled: [], previous: null }; }
 function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
@@ -122,7 +132,7 @@ Page({
       });
       this.history = result.history.slice(-10);
       const actions = ai.describeRecords(result.records);
-      const appended = [...this.data.messages, { role: 'assistant', text: result.reply || '（模型没有返回内容）' }];
+      const appended = [...this.data.messages, { role: 'assistant', text: result.reply || '（模型没有返回内容）', nodes: render(result.reply) }];
       if (actions.length) appended.push({ role: 'system', text: actions.join('；') });
       this.setData({ messages: appended, sending: false });
     } catch (error) {

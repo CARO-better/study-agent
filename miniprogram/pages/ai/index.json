@@ -1,5 +1,8 @@
 {
   "navigationBarTitleText": "AI 助理",
   "navigationBarBackgroundColor": "#F4F7FC",
-  "navigationBarTextStyle": "black"
+  "navigationBarTextStyle": "black",
+  "usingComponents": {
+    "towxml": "/towxml/towxml"
+  }
 }
