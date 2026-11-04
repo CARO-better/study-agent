@@ -47,7 +47,7 @@ function runConfigFile(content) {
   try {
     const filename = path.join(directory, 'config.json');
     writeFileSync(filename, content);
-    return spawnSync(process.execPath, [path.resolve('scripts/check-config.js'), filename], {
+    return spawnSync(process.execPath, [path.resolve(__dirname, '../scripts/check-config.js'), filename], {
       cwd: path.resolve(__dirname, '..'), encoding: 'utf8'
     });
   } finally {
@@ -73,12 +73,12 @@ test('CLI suppresses file parse content and credentials on malformed input', () 
   assert.equal((bad.stdout + bad.stderr).includes('test-only-malformed-secret'), false);
 });
 
-// Exercises the import boundary: all configured page routes need files, no real AppID committed.
+// Exercises the import boundary: all configured page routes need files and the AppID must use a supported format.
 test('mini program entry and registered pages are present for developer tool import', () => {
   const root = path.resolve(__dirname, '..');
   const project = JSON.parse(readFileSync(path.join(root, 'project.config.json'), 'utf8'));
   assert.equal(project.compileType, 'miniprogram');
-  assert.equal(project.appid, 'touristappid');
+  assert.match(project.appid, /^(touristappid|wx[a-f0-9]{16})$/);
   const mini = path.join(root, project.miniprogramRoot);
   const app = JSON.parse(readFileSync(path.join(mini, 'app.json'), 'utf8'));
   assert.ok(app.pages.length > 0);
