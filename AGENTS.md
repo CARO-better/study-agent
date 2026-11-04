@@ -19,6 +19,17 @@
 - 不提交模型Key、AppSecret、环境文件、开发工具私有配置、缓存或用户任务数据。
 - 发布不能使用强制推送覆盖既有仓库历史；先核对目标仓库与分支。
 
+## 每次重大改动后必须推送（用户明确要求）
+
+凡是较大功能、优化或重要修复，走完这套固定动作，缺一步都算没做完：
+
+1. 按上面的清单更新 CHANGELOG.md（未发布章节）与 docs/FEATURES.md；需要时更新版本说明和 README。
+2. 运行 `npm test` 并记录实际结果；通过、部署、真机分别说明，不能互相顶替。
+3. 按文件暂存并提交，不使用 `git add .`。
+4. 推送到 `origin/codex/study-agent`：`git push origin codex/study-agent`。
+5. 推送后用 `git ls-remote origin refs/heads/codex/study-agent` 核对哈希与本地 `git rev-parse HEAD` 一致，并把核对结果写进当次汇报。
+6. 推送失败（网络或 GitHub 服务端错误）只能如实说明并重试，**不得声称已推送**；本机若出现 `.git/refs/**` 写入丢失（HEAD 变成“无提交”），先按 HANDOFF 第5节修复引用再推送。
+
 ## 协作偏好
 
 需要用户回答的问题或作选择时，使用选择问卷；无法枚举的仓库地址等信息可使用问卷自由填写。
