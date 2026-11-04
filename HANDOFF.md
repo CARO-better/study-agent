@@ -68,24 +68,34 @@
 
 Task3重要修复不可回退：父子任务课程一致性、学期周数缩减检查属于Task2；Task3则确保保留块旁休息、实际进度不被无关课表冲突阻止、needs_attention可跨重连读取、脏计划全量重建、撤回拒绝恢复原本需要处理的脏快照。不要用简化原型的逻辑覆盖这些后端保护。
 
-## 5. 最重要的现场：本地已提交，但还没推送
+## 5. 最重要的现场：Task4已提交并推送
 
 当前本地分支：`codex/study-agent`。HEAD 用 `git log -1 --oneline` 查看；**Task4 代码在 `05fecec`**。远程：`https://github.com/CARO-better/study-agent.git`。
 
-远程仍是 `3db4d68`（v0.1.0 稳定快照）。用户自行执行push并提供截图，截图显示新远程分支已创建、upstream已关联；此后尝试新鲜远程只读核验因本机schannel凭据问题失败，因此不要将本交接写成再次独立确认了服务器HEAD。正常可浏览地址：
+远程 `origin/codex/study-agent` 已包含这些提交（用 `git ls-remote origin refs/heads/codex/study-agent` 核对最新哈希）。此前用户自己推过一次（截图显示分支已创建、upstream 已关联），后来本机 schannel 凭据报错，这一次用本机 git 凭据直接推送成功。正常可浏览地址：
 
 https://github.com/CARO-better/study-agent/tree/codex/study-agent
-
-本地提交都**还没推送**：
 
 | 提交 | 内容 |
 | --- | --- |
 | `05fecec` | Task4 后端收口：`core/upload.js`、路由表、票据与字节校验、OCR 额度与清理、部署清单、api README、测试 |
 | `05fecec` 之后的文档提交 | HANDOFF、AGENTS/README 入口、已批准设计与审阅证据、提交状态说明 |
 
-换电脑或新克隆前必须推送，否则这些提交只存在于本机。交接时的脏工作区（Task4 原始未提交文件）已全部进入 `05fecec`，下一位不要再去找“未提交的Task4文件”。
+交接时的脏工作区（Task4 原始未提交文件）已全部进入 `05fecec`，下一位不要再去找“未提交的Task4文件”。新克隆会带回这些提交，但**不会**带回微信本地试用数据（`study_trial_v1`）。
 
-**本机 git 有一个必须知道的坑**：`git commit` 和 `git update-ref` 写入 `.git/refs/heads/codex/study-agent` 后会被环境丢弃，导致 HEAD 变成“无提交”，`git log` 报 `does not have any commits yet`。提交对象和 reflog 都正常，只是分支引用没落地。恢复办法：读 `.git/logs/HEAD` 最后一行拿到新提交哈希，用文件写入工具把该哈希写进 `.git/refs/heads/codex/study-agent`（纯哈希加换行），再 `git rev-parse HEAD` 核对。本次两次提交都靠这个办法修复，历史未丢。
+**本机 git 有一个必须知道的坑**：`git commit`、`git update-ref` 和 `git push` 对 `.git/refs/**` 的写入会被环境丢弃，表现为：
+
+- 提交后 HEAD 变成“无提交”，`git log` 报 `your current branch ... does not have any commits yet`，`git status` 把所有文件列成新增；
+- push 成功后 `git status -sb` 显示 `[gone]`，因为 `refs/remotes/origin/*` 也没落地。
+
+提交对象、reflog 和远程仓库都是好的，只是引用文件没写成。恢复办法：
+
+1. 读 `.git/logs/HEAD` 最后一行，拿右侧的新提交哈希；
+2. 用文件写入工具把该哈希（纯哈希加换行）写进 `.git/refs/heads/codex/study-agent`；
+3. push 之后再写一份到 `.git/refs/remotes/origin/codex/study-agent`；
+4. `git rev-parse HEAD`、`git status -sb` 核对。
+
+本次四次提交都靠这个办法修复，历史与远程均未丢。若换机器或换环境，这个坑不一定复现。
 
 Task4原代理被用户“先给雏形”指示中断，没有完整收尾报告。**2026-11-04 晚由下一位Agent收口**：复现并修复了唯一失败用例，补齐截图上传链路，补充回归测试，并在 `cloudfunctions/api/README.md` 记录了模型、凭据与OCR契约。不要再一边新写同名模块，一边丢掉已有实现。
 
@@ -184,7 +194,7 @@ npm test
 
 每个较大改动同步维护：CHANGELOG.md、docs/FEATURES.md、docs/releases/<version>.md，必要时README。版本说明分别写本地测试、开发工具、云端、真机、正式发布状态；缺少凭据就如实写未配置，不能展示假成功。
 
-本次交接文档及归档材料已在 `05fecec` 之后的提交里入库（Task4后端在 `05fecec`），全部提交都**只在本地、未推送**；GitHub 上的 codex/study-agent 仍停在 `3db4d68`。根目录 AGENTS 已记录用户的长期要求。
+本次交接文档及归档材料已在 `05fecec` 之后的提交里入库（Task4后端在 `05fecec`），并已推送到 `origin/codex/study-agent`。根目录 AGENTS 已记录用户的长期要求。
 
 ## 10. Suggested skills / 建议调用的技能
 
@@ -203,4 +213,4 @@ npm test
 
 ## 11. 给下一位Agent的启动指令
 
-> 请进入D:\study-agent，先完整阅读HANDOFF.md和AGENTS.md，再按文档引用阅读已批准设计、计划和当前功能状态。保留现有试用数据和提交历史；本地已有 `05fecec` 及其后的文档提交，均未推送，先核对 `git log` 与 `npm test`（当前应为66项全通过），并注意第5节记录的 git 引用写入坑。在现有可试用雏形上小步推进。用户要尽快试用、之后逐个完善；不要重新开始需求访谈或重做Task1—4。重要改动同步维护更新日志和功能说明。遇到需要用户选择的事情用问卷。
+> 请进入D:\study-agent，先完整阅读HANDOFF.md和AGENTS.md，再按文档引用阅读已批准设计、计划和当前功能状态。保留现有试用数据和提交历史；`05fecec` 及其后的文档提交已推送到 `origin/codex/study-agent`，先核对 `git log` 与 `npm test`（当前应为66项全通过），并注意第5节记录的 git 引用写入坑。在现有可试用雏形上小步推进。用户要尽快试用、之后逐个完善；不要重新开始需求访谈或重做Task1—4。重要改动同步维护更新日志和功能说明。遇到需要用户选择的事情用问卷。
