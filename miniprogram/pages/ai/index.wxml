@@ -1,0 +1,34 @@
+<view class="chat">
+  <view class="chat-head"><text class="chat-title">AI 助理</text><text class="link" bindtap="openSettings">设置</text></view>
+  <view wx:if="{{!hasKey}}" class="notice">还没有填 API Key。点右上角「设置」填服务地址、模型名和 Key；Key 只保存在本机。</view>
+  <view class="thread">
+    <view wx:if="{{!messages.length}}" class="empty">可以直接说「明天交高数作业，预计一小时」，也可以发一张课表或作业截图，我会整理成待办。</view>
+    <view wx:for="{{messages}}" wx:key="index" class="msg {{item.role}}">
+      <view wx:if="{{item.image}}" class="thumb"><image src="{{item.image}}" mode="widthFix"/></view>
+      <view wx:if="{{item.text}}" class="bubble">{{item.text}}</view>
+    </view>
+    <view wx:if="{{sending}}" class="msg assistant"><view class="bubble thinking">正在处理…</view></view>
+  </view>
+  <view class="composer">
+    <view wx:if="{{pendingImage}}" class="preview"><image src="{{pendingImage}}" mode="aspectFill"/><text class="remove" bindtap="clearImage">×</text></view>
+    <view class="composer-row">
+      <button class="icon" bindtap="chooseImage">图片</button>
+      <input class="chat-input" placeholder="说点什么，或发截图" value="{{input}}" bindinput="input" confirm-type="send" bindconfirm="send"/>
+      <button class="send" bindtap="send" disabled="{{sending}}">发送</button>
+    </view>
+  </view>
+</view>
+
+<view wx:if="{{showSettings}}" class="overlay"><view class="sheet">
+  <view class="sheet-head"><view class="section-title">模型设置</view><text class="link" bindtap="closeSettings">关闭</text></view>
+  <view class="sub">Key 仅保存在本机存储，不会上传到除模型服务以外的任何地方。</view>
+  <view class="label">服务地址</view>
+  <input class="input" value="{{settings.url}}" data-field="url" bindinput="field"/>
+  <view class="label">模型名</view>
+  <input class="input" value="{{settings.model}}" data-field="model" bindinput="field"/>
+  <view class="label">API Key</view>
+  <input class="input" password value="{{settings.apiKey}}" data-field="apiKey" bindinput="field"/>
+  <view class="sub">DeepSeek 示例：https://api.deepseek.com/chat/completions ，模型 deepseek-flash（支持读图）。</view>
+  <button class="primary submit" bindtap="saveSettings">保存</button>
+  <view class="sub">还需要在小程序后台「开发管理 → 服务器域名」把上面域名加进 request 合法域名，否则真机请求会被拦截；开发者工具里可以临时勾选「不校验合法域名」。</view>
+</view></view>

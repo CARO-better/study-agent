@@ -1,6 +1,7 @@
 {
   "pages": [
-    "pages/today/index"
+    "pages/today/index",
+    "pages/ai/index"
   ],
   "window": {
     "navigationBarTitleText": "学程 · 本地试用版",
