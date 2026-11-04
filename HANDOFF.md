@@ -7,7 +7,7 @@
 ## 1. 五分钟接手步骤
 
 1. 工作目录设为 `D:\study-agent`，读取 `AGENTS.md`、本文件、`docs/FEATURES.md`。
-2. 执行 `git status --short`、`git log -8 --oneline`、`git branch -vv`，确认本地未提交的Task4文件仍在。
+2. 执行 `git status --short`、`git log -8 --oneline`、`git branch -vv`，确认工作区干净、HEAD 是 `cbe08db`（Task4收口提交已完成，见第5节）。
 3. 读取下方“本地未完成工作”和测试证据。不要用 `git reset --hard`、`git clean` 或直接拉取覆盖工作区。
 4. 如用户反馈试用问题，优先修复原型中阻碍使用的具体问题；不要先花数小时把所有后端完善后才给用户看。
 5. 用户未反馈其他优先级时，先把未完成的模型/OCR任务收束到可验证、可独立审阅的小步，再把已经有的后端逐步接入原型。
@@ -68,36 +68,24 @@
 
 Task3重要修复不可回退：父子任务课程一致性、学期周数缩减检查属于Task2；Task3则确保保留块旁休息、实际进度不被无关课表冲突阻止、needs_attention可跨重连读取、脏计划全量重建、撤回拒绝恢复原本需要处理的脏快照。不要用简化原型的逻辑覆盖这些后端保护。
 
-## 5. 最重要的现场：稳定提交与脏工作区不是同一版本
+## 5. 最重要的现场：本地已提交，但还没推送
 
-当前本地分支：`codex/study-agent`。
+当前本地分支：`codex/study-agent`，HEAD `cbe08db`（2026-11-04 晚收口后）。远程：`https://github.com/CARO-better/study-agent.git`。
 
-交接核对时HEAD：`3db4d68`。远程：`https://github.com/CARO-better/study-agent.git`。
-
-用户自行执行push并提供截图，截图显示新远程分支已创建、upstream已关联。当前本地 `git branch -vv` 也显示跟踪 `origin/codex/study-agent`。此后尝试新鲜远程只读核验因本机schannel凭据问题失败，因此不要将本交接写成再次独立确认了服务器HEAD。正常可浏览地址：
+远程仍是 `3db4d68`（v0.1.0 稳定快照）。用户自行执行push并提供截图，截图显示新远程分支已创建、upstream已关联；此后尝试新鲜远程只读核验因本机schannel凭据问题失败，因此不要将本交接写成再次独立确认了服务器HEAD。正常可浏览地址：
 
 https://github.com/CARO-better/study-agent/tree/codex/study-agent
 
-稳定提交包含试用前端、Task1—3后端基础与版本文档。**本地Task4改动没有推送**。新克隆仓库不会带回这些未提交文件；如果后续换电脑，要显式备份或完成审阅后提交，不能依赖GitHub找回它们。
+本地现有两个新提交，**都还没推送**：
 
-交接时 `git status --short` 中现有Task4文件：
+| 提交 | 内容 |
+| --- | --- |
+| `05fecec` | Task4 后端收口：`core/upload.js`、路由表、票据与字节校验、OCR 额度与清理、部署清单、api README、测试 |
+| `cbe08db` | 交接文档：HANDOFF、AGENTS/README 入口、已批准设计与审阅证据 |
 
-```text
- M cloudfunctions/api/adapters/repository.js
- M cloudfunctions/api/core/errors.js
- M cloudfunctions/api/core/imports.js
- M cloudfunctions/api/core/records.js
- M cloudfunctions/api/index.js
-?? cloudfunctions/api/adapters/model.js
-?? cloudfunctions/api/adapters/ocr.js
-?? cloudfunctions/api/adapters/safe-http.js
-?? cloudfunctions/api/core/extraction.js
-?? cloudfunctions/api/core/provider-settings.js
-?? cloudfunctions/api/core/upload-cleanup.js
-?? cloudfunctions/api/core/vault.js
-?? tests/imports.test.js
-?? tests/providers.test.js
-```
+换电脑或新克隆前必须推送，否则这两个提交只存在于本机。交接时的脏工作区（Task4 原始未提交文件）已全部进入 `05fecec`，下一位不要再去找“未提交的Task4文件”。
+
+**本机 git 有一个必须知道的坑**：`git commit` 和 `git update-ref` 写入 `.git/refs/heads/codex/study-agent` 后会被环境丢弃，导致 HEAD 变成“无提交”，`git log` 报 `does not have any commits yet`。提交对象和 reflog 都正常，只是分支引用没落地。恢复办法：读 `.git/logs/HEAD` 最后一行拿到新提交哈希，用文件写入工具把该哈希写进 `.git/refs/heads/codex/study-agent`（纯哈希加换行），再 `git rev-parse HEAD` 核对。本次两次提交都靠这个办法修复，历史未丢。
 
 Task4原代理被用户“先给雏形”指示中断，没有完整收尾报告。**2026-11-04 晚由下一位Agent收口**：复现并修复了唯一失败用例，补齐截图上传链路，补充回归测试，并在 `cloudfunctions/api/README.md` 记录了模型、凭据与OCR契约。不要再一边新写同名模块，一边丢掉已有实现。
 
@@ -192,11 +180,11 @@ npm test
 
 原用户已成功使用的推送方式：配置origin为上述仓库后，`git push -u origin codex/study-agent`。不要强推覆盖远程历史。
 
-只暂存本次实际完成并验证的文件；Task4未提交工作必须先审阅再单独提交。不能用 `git add .` 把所有半成品混进发布。
+只暂存本次实际完成并验证的文件；有风险模块先审阅再单独提交。不能用 `git add .` 把所有半成品混进发布。提交后务必核对 HEAD，因为本机有第5节描述的引用写入丢失问题。
 
 每个较大改动同步维护：CHANGELOG.md、docs/FEATURES.md、docs/releases/<version>.md，必要时README。版本说明分别写本地测试、开发工具、云端、真机、正式发布状态；缺少凭据就如实写未配置，不能展示假成功。
 
-本次交接文档及归档材料在生成时先保存在项目内，**尚未自动推送或提交**，下一位Agent需先查看实际Git状态，不要假定GitHub已包含这些新增文件。现有根目录AGENTS已经记录用户的长期要求。
+本次交接文档及归档材料已在 `cbe08db` 提交（Task4后端在 `05fecec`），两个提交都**只在本地、未推送**；GitHub 上的 codex/study-agent 仍停在 `3db4d68`。根目录 AGENTS 已记录用户的长期要求。
 
 ## 10. Suggested skills / 建议调用的技能
 
@@ -215,4 +203,4 @@ npm test
 
 ## 11. 给下一位Agent的启动指令
 
-> 请进入D:\study-agent，先完整阅读HANDOFF.md和AGENTS.md，再按文档引用阅读已批准设计、计划和当前功能状态。保留现有试用数据、稳定提交及所有未提交改动。先核对Git和npm test（当前应为66项全通过），在现有可试用雏形上小步推进。用户要尽快试用、之后逐个完善；不要重新开始需求访谈或重做Task1—3。重要改动同步维护更新日志和功能说明。遇到需要用户选择的事情用问卷。
+> 请进入D:\study-agent，先完整阅读HANDOFF.md和AGENTS.md，再按文档引用阅读已批准设计、计划和当前功能状态。保留现有试用数据和提交历史；本地已有 `05fecec`、`cbe08db` 两个尚未推送的提交，先核对 `git log` 与 `npm test`（当前应为66项全通过），并注意第5节记录的 git 引用写入坑。在现有可试用雏形上小步推进。用户要尽快试用、之后逐个完善；不要重新开始需求访谈或重做Task1—4。重要改动同步维护更新日志和功能说明。遇到需要用户选择的事情用问卷。
