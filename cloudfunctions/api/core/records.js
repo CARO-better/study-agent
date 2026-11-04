@@ -125,7 +125,7 @@ async function handleRecords({ owner, action, payload }, deps) {
   if (action === 'data.delete') {
     if (payload.confirmed !== true) fail('CONFIRMATION_REQUIRED');
     const scope = payload.scope;
-    if (!isObject(scope) || !COLLECTIONS.includes(scope.collection) || !Array.isArray(scope.records) || scope.records.length < 1 || scope.records.length > 100 || new Set(scope.records.map(r => r.id)).size !== scope.records.length || !scope.records.every(r => isObject(r) && typeof r.id === 'string' && Number.isInteger(r.version) && r.version > 0)) fail('VALIDATION');
+    if (!isObject(scope) || !['profiles','semesters','courses','tasks','importDrafts'].includes(scope.collection) || !Array.isArray(scope.records) || scope.records.length < 1 || scope.records.length > 100 || new Set(scope.records.map(r => r.id)).size !== scope.records.length || !scope.records.every(r => isObject(r) && typeof r.id === 'string' && Number.isInteger(r.version) && r.version > 0)) fail('VALIDATION');
     return deps.repository.transaction(owner, tx => removeRecords(tx, owner, scope.collection, scope.records));
   }
   fail('UNKNOWN_ACTION');

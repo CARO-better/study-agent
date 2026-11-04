@@ -1,0 +1,72 @@
+'use strict';
+const { fail } = require('./errors');
+const { getRecord, writeRecord, isObject } = require('./records');
+const { buildPlan } = require('./planner');
+const { replan, undoRevision } = require('./revisions');
+const stamp = s => typeof s==='string' && /(?:Z|[+-]\d\d:\d\d)$/.test(s) && Number.isFinite(Date.parse(s));
+function intervals(a) { return Array.isArray(a) && a.length<=500 && a.every(x=>isObject(x)&&stamp(x.start)&&stamp(x.end)&&Date.parse(x.start)<Date.parse(x.end)); }
+function periodMap(m) { return isObject(m) && Object.keys(m).length<=24 && Object.entries(m).every(([k,v])=>/^(?:[1-9]|1\d|2[0-4])$/.test(k) && isObject(v) && /^([01]\d|2[0-3]):[0-5]\d$/.test(v.start) && /^([01]\d|2[0-3]):[0-5]\d$/.test(v.end) && v.start<v.end); }
+async function environmentVersion(tx,owner) { const result=[]; for(const c of ['profiles','courses','semesters']) { const rows=await tx.list(owner,c); result.push([c,rows.map(r=>[r.id,r.version]).sort((a,b)=>a[0].localeCompare(b[0]))]); } return JSON.stringify(result); }
+async function config(tx,owner,now) {
+  const profiles=await tx.list(owner,'profiles'), profile=profiles[0];
+  const courses=await tx.list(owner,'courses'), semesters=await tx.list(owner,'semesters');
+  const map=profile?.termPeriodTimes||{}, fixed=[];
+  for(const course of courses) for(const entry of course.schedule) {
+    if(entry.periods.some(n=>!map[n])) return {configurationNeeded:['termPeriodTimes']};
+    const sem=semesters.find(s=>s.id===course.semesterId); if(!sem) return {configurationNeeded:['semester']};
+    const initial=Date.parse(`${sem.startDate}T00:00:00+08:00`), localDay=new Date(initial+8*3600000).getUTCDay()||7;
+    const monday=initial-(localDay-1)*86400000;
+    for(const week of entry.weeks) for(const p of entry.periods) {
+      const day=monday+((week-1)*7+entry.weekday-1)*86400000;
+      const date=new Date(day+8*3600000).toISOString().slice(0,10);
+      if(date<sem.startDate||date>sem.endDate) continue;
+      fixed.push({start:new Date(Date.parse(`${date}T${map[p].start}:00+08:00`)).toISOString(),end:new Date(Date.parse(`${date}T${map[p].end}:00+08:00`)).toISOString()});
+    }
+  }
+  return {availability:profile?.availability||[],fixedBlocks:fixed,now};
+}
+async function handlePlanner({owner,action,payload},deps) {
+  const repo=deps.repository;
+  if(action==='plan.get') return repo.get(owner,'plans','current');
+  if(action==='profiles.setAvailability') {
+    if(!intervals(payload.availability) || (payload.termPeriodTimes!==undefined && !periodMap(payload.termPeriodTimes))) fail('VALIDATION');
+    return repo.transaction(owner,async tx=>{const p=await getRecord(tx,owner,'profiles',payload.id); if(p.version!==payload.expectedVersion) fail('CONFLICT'); return tx.save(owner,'profiles',{...p,availability:structuredClone(payload.availability),...(payload.termPeriodTimes!==undefined?{termPeriodTimes:structuredClone(payload.termPeriodTimes)}:{})},p.version);});
+  }
+  if(!['plan.generate','plan.progress','plan.undo','plan.manualBlock'].includes(action)) fail('UNKNOWN_ACTION');
+  return repo.transaction(owner,async tx=>{
+    const current=await tx.get(owner,'plans','current'); const version=current?.version||0;
+    if(!Number.isInteger(payload.expectedVersion)||payload.expectedVersion!==version) fail('CONFLICT');
+    if(action==='plan.undo') {
+      if(!current || typeof payload.revisionId!=='string') fail('VALIDATION');
+      const revision=await getRecord(tx,owner,'planRevisions',payload.revisionId);
+      const tasks=await tx.list(owner,'tasks'); const undone=undoRevision({...current,tasks},revision,payload.expectedVersion);
+      if(revision.environmentVersion!==await environmentVersion(tx,owner)) undone.conflicts.push({reason:'settings_changed'});
+      if(undone.conflicts.length) return {plan:current,conflicts:undone.conflicts};
+      const restored=await tx.save(owner,'plans',{...current,blocks:undone.plan.blocks,unscheduled:undone.plan.unscheduled,reasons:undone.plan.reasons,lastRevisionId:null},version);
+      return {plan:restored,conflicts:[]};
+    }
+    if(action==='plan.manualBlock') {
+      if(!current || !isObject(payload.block) || !intervals([payload.block])) fail('VALIDATION');
+      const task=await getRecord(tx,owner,'tasks',payload.block.taskId);
+      const schedule=await config(tx,owner,deps.now()); if(schedule.configurationNeeded) return schedule;
+      const b={id:deps.newId(),taskId:task.id,taskVersion:task.version,start:payload.block.start,end:payload.block.end,locked:true};
+      if([...current.blocks,...schedule.fixedBlocks].some(x=>Date.parse(x.start)<Date.parse(b.end)&&Date.parse(x.end)>Date.parse(b.start))) fail('CONFLICT');
+      return tx.save(owner,'plans',{...current,blocks:[...current.blocks,b]},version);
+    }
+    const settings=await config(tx,owner,deps.now()); if(settings.configurationNeeded) return settings;
+    let tasks=await tx.list(owner,'tasks'); const changes=payload.changes||[];
+    if(action==='plan.progress') {
+      if(!current || !Array.isArray(changes)||!changes.length||changes.length>50||new Set(changes.map(c=>c.id)).size!==changes.length) fail('VALIDATION');
+      for(const c of changes) { if(!isObject(c)||!Number.isInteger(c.expectedVersion)||(c.completed!==undefined && typeof c.completed!=='boolean')||!Number.isInteger(c.remainingMinutes)||c.remainingMinutes<0||c.remainingMinutes>100000) fail('VALIDATION'); const t=await getRecord(tx,owner,'tasks',c.id); if(t.version!==c.expectedVersion) fail('CONFLICT'); if(['completed','cancelled'].includes(t.status)) fail('CONFLICT'); const saved=await writeRecord(tx,owner,'tasks',{remainingMinutes:c.remainingMinutes,status:c.completed===true?'completed':'in_progress'},t,t.version,deps); tasks=tasks.map(item=>item.id===saved.id?saved:item); }
+    }
+    const before=current?.blocks||[];
+    const state={...settings,tasks,blocks:before,unscheduled:current?.unscheduled||[],reasons:current?.reasons||[],version};
+    const result=replan(state,{id:deps.newId(),taskIds:changes.map(c=>c.id),reason:action==='plan.progress'?'progress':'generate'});
+    result.plan.blocks=result.plan.blocks.map(b=>b.id?b:{...b,id:deps.newId()}); result.revision.afterBlocks=structuredClone(result.plan.blocks); result.revision.addedBlocks=result.plan.blocks.filter(b=>!before.some(old=>old.id===b.id));
+    result.revision.environmentVersion=await environmentVersion(tx,owner);
+    const revision=await tx.save(owner,'planRevisions',result.revision,0);
+    const plan=await tx.save(owner,'plans',{id:'current',blocks:result.plan.blocks,unscheduled:result.plan.unscheduled,reasons:result.plan.reasons,lastRevisionId:revision.id},version);
+    return {plan,revision};
+  });
+}
+module.exports={handlePlanner};

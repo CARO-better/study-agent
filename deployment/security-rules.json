@@ -1,9 +1,38 @@
 {
-  "profiles": { "read": "auth != null && doc.ownerOpenId == auth.openid", "write": false },
-  "semesters": { "read": "auth != null && doc.ownerOpenId == auth.openid", "write": false },
-  "courses": { "read": "auth != null && doc.ownerOpenId == auth.openid", "write": false },
-  "tasks": { "read": "auth != null && doc.ownerOpenId == auth.openid", "write": false },
-  "importDrafts": { "read": "auth != null && doc.ownerOpenId == auth.openid", "write": false },
-  "ownerLocks": { "read": false, "write": false },
-  "credentials": { "read": false, "write": false }
+  "profiles": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "semesters": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "courses": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "tasks": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "importDrafts": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "ownerLocks": {
+    "read": false,
+    "write": false
+  },
+  "credentials": {
+    "read": false,
+    "write": false
+  },
+  "plans": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  },
+  "planRevisions": {
+    "read": "auth != null && doc.ownerOpenId == auth.openid",
+    "write": false
+  }
 }

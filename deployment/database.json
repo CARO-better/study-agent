@@ -2,13 +2,134 @@
   "format": "study-agent/database-v1",
   "applyManually": true,
   "collections": [
-    { "name": "profiles", "indexes": [{ "fields": { "ownerOpenId": 1, "_id": 1 }, "unique": false }] },
-    { "name": "semesters", "indexes": [{ "fields": { "ownerOpenId": 1, "_id": 1 }, "unique": false }] },
-    { "name": "courses", "indexes": [{ "fields": { "ownerOpenId": 1, "_id": 1 }, "unique": false }, { "fields": { "ownerOpenId": 1, "semesterId": 1, "_id": 1 }, "unique": false }] },
-    { "name": "tasks", "indexes": [{ "fields": { "ownerOpenId": 1, "_id": 1 }, "unique": false }, { "fields": { "ownerOpenId": 1, "courseId": 1, "_id": 1 }, "unique": false }, { "fields": { "ownerOpenId": 1, "parentTaskId": 1, "_id": 1 }, "unique": false }, { "fields": { "ownerOpenId": 1, "status": 1, "_id": 1 }, "unique": false }] },
-    { "name": "importDrafts", "indexes": [{ "fields": { "ownerOpenId": 1, "_id": 1 }, "unique": false }] },
-    { "name": "ownerLocks", "indexes": [] },
-    { "name": "credentials", "indexes": [] }
+    {
+      "name": "profiles",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "semesters",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "courses",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "semesterId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "tasks",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "courseId": 1,
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "parentTaskId": 1,
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "status": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "importDrafts",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "ownerLocks",
+      "indexes": []
+    },
+    {
+      "name": "credentials",
+      "indexes": []
+    },
+    {
+      "name": "plans",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "planRevisions",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
+    }
   ],
-  "notes": ["Declarative deployment checklist, not an automatically consumed CLI schema", "No automatic TTL: pending drafts carry cleanupAfter; imports.markExpired discards expired raw material for the authenticated owner", "Only the API service identity writes these collections; never give clients administrative database credentials"]
+  "notes": [
+    "Declarative deployment checklist, not an automatically consumed CLI schema",
+    "No automatic TTL: pending drafts carry cleanupAfter; imports.markExpired discards expired raw material for the authenticated owner",
+    "Only the API service identity writes these collections; never give clients administrative database credentials"
+  ]
 }
