@@ -67,3 +67,5 @@ The planner uses deterministic local computation; it makes no AI/provider call. 
 Progress updates return `status: 'needs_attention'`, the versioned plan and conflicts if a retained block conflicts with a class. Valid progress is still saved; resolve the conflict before regenerating. Undo reports `remaining_work_exceeded` when the previous future blocks exceed the task's current remaining minutes.
 
 A plan requiring attention stores `status: 'needs_attention'` and `attentionConflicts`; `plan.get` returns these after reconnecting. A successful rebuild clears them. Locked blocks incompatible with actual remaining work stay visible and must be resolved before rebuilding.
+
+Undo of a rebuild whose prior plan needed attention returns `prior_plan_needs_attention`; it cannot restore the stale snapshot.

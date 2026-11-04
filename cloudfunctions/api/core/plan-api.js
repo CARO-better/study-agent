@@ -82,7 +82,7 @@ async function handlePlanner({owner,action,payload},deps) {
       return {plan:current,conflicts};
     }
     const before=current?.blocks||[];
-    const state={...settings,tasks,blocks:before,unscheduled:current?.unscheduled||[],reasons:current?.reasons||[],version};
+    const state={...settings,status:current?.status,tasks,blocks:before,unscheduled:current?.unscheduled||[],reasons:current?.reasons||[],version};
     const result=replan(state,{id:deps.newId(),taskIds:changes.map(c=>c.id),reason:action==='plan.progress' && current?.status!=='needs_attention'?'progress':'generate'});
     result.plan.blocks=result.plan.blocks.map(b=>b.id?b:{...b,id:deps.newId()}); result.revision.afterBlocks=structuredClone(result.plan.blocks); result.revision.addedBlocks=result.plan.blocks.filter(b=>!before.some(old=>old.id===b.id));
     result.revision.environmentVersion=await environmentVersion(tx,owner);
