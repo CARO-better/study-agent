@@ -6,3 +6,4 @@ project.private.config.json
 deployment/config.local.json
 deployment/cloudbaserc.local.json
 *.log
+.npm-cache/
