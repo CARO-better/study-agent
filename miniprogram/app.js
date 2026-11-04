@@ -1,5 +1,1 @@
-App({
-  globalData: {
-    connectionStatus: 'unconfigured'
-  }
-});
+App({});

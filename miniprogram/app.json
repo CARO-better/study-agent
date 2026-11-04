@@ -1,5 +1,12 @@
 {
-  "pages": ["pages/today/index"],
-  "window": { "navigationBarTitleText": "学期学习助理" },
+  "pages": [
+    "pages/today/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "学程 · 本地试用版",
+    "navigationBarBackgroundColor": "#F4F7FC",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F4F7FC"
+  },
   "sitemapLocation": "sitemap.json"
 }

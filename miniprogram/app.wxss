@@ -1,1 +1,1 @@
-page { background: #f5f6f8; color: #18202c; font-family: sans-serif; }
+page{background:#F4F7FC;color:#14213D;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;font-size:28rpx} button{font-size:28rpx} button::after{border:0}
