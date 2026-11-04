@@ -1,5 +1,6 @@
 const ai = require('../../lib/ai');
 const tools = require('../../lib/tools');
+const providers = require('../../lib/providers');
 const KEY = 'study_trial_v1';
 
 function fresh() { return { courses: [], tasks: [], availability: [], blocks: [], unscheduled: [], previous: null }; }
@@ -15,7 +16,10 @@ Page({
     hasKey: false,
     pendingImage: '',
     today: today(),
-    notice: ''
+    notice: '',
+    presets: providers.PRESETS,
+    activePreset: '',
+    visionHint: ''
   },
   onLoad() {
     const saved = wx.getStorageSync(KEY);
@@ -25,7 +29,23 @@ Page({
     this.history = [];
   },
   openSettings() {
-    this.setData({ showSettings: true, settings: ai.readSettings(wx.getStorageSync) });
+    const settings = ai.readSettings(wx.getStorageSync);
+    const matched = providers.matchPreset(settings);
+    this.setData({
+      showSettings: true,
+      settings,
+      activePreset: matched ? matched.id : 'custom',
+      visionHint: matched ? matched.note : ''
+    });
+  },
+  usePreset(e) {
+    const id = e.currentTarget.dataset.id;
+    if (id === 'custom') {
+      this.setData({ activePreset: 'custom', visionHint: '自己填服务地址和模型名，地址必须是公网 HTTPS，并以 /chat/completions 结尾。' });
+      return;
+    }
+    const preset = providers.presetById(id);
+    this.setData({ settings: providers.applyPreset(this.data.settings, id), activePreset: id, visionHint: preset ? preset.note : '' });
   },
   closeSettings() { this.setData({ showSettings: false }); },
   field(e) { this.setData({ [`settings.${e.currentTarget.dataset.field}`]: e.detail.value }); },

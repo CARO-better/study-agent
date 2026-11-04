@@ -32,3 +32,8 @@
 .input{box-sizing:border-box;background:#F4F7FC;border-radius:12rpx;padding:18rpx 20rpx;min-height:78rpx}
 .primary{background:#2457D6;color:white;border-radius:14rpx;font-weight:600}
 .submit{margin-top:32rpx}
+
+.chips{display:flex;flex-wrap:wrap;gap:14rpx;margin-top:6rpx}
+.chip{padding:12rpx 24rpx;border-radius:999rpx;background:#F1F5FC;color:#3D5372;font-size:25rpx;border:2rpx solid transparent}
+.chip-on{background:#E5ECFF;color:#2457D6;border-color:#2457D6;font-weight:600}
+.hint{margin-top:12rpx;font-size:23rpx;color:#526580;background:#F4F7FC;border-radius:10rpx;padding:12rpx 16rpx;line-height:1.6}

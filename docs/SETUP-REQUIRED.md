@@ -49,14 +49,19 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ## 2. 模型服务（你自选，填在「AI → 设置」里）
 
-| 字段 | 示例 | 说明 |
-| --- | --- | --- |
-| 服务地址 | `https://api.deepseek.com/chat/completions` | 必须是公网 HTTPS，不能带账号密码或查询参数 |
-| 模型名 | `deepseek-flash` | **这个模型支持读图**；纯文字对话也可以用 `deepseek-chat` |
-| API Key | `sk-...` | 只有你自己有；只保存在本机存储 |
+设置页已经内置三个常用服务，点一下自动填好地址和模型名，你只需要再填 API Key：
+
+| 预置 | 服务地址 | 默认模型 | 能读图 |
+| --- | --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com/chat/completions` | `deepseek-flash` | ✅ 官方支持 |
+| Kimi | `https://api.moonshot.cn/v1/chat/completions` | `kimi-k2.6` | ✅ 支持图片输入 |
+| 小米 MiMo | `https://api.xiaomimimo.com/v1/chat/completions` | `mimo-v2.6-flash` | ⚠️ 官方未标注，截图场景不建议 |
+| 自定义 | 自己填 | 自己填 | 看服务商 |
+
+自定义要求：公网 HTTPS，地址以 `/chat/completions` 结尾（OpenAI 兼容格式）。模型名和地址会随服务商调整，改 `miniprogram/lib/providers.js` 一处即可。
 
 **必须再做一步：配 request 合法域名。**
-mp.weixin.qq.com → 开发管理 → 开发设置 → 服务器域名 → **request 合法域名**，加入 `https://api.deepseek.com`。
+mp.weixin.qq.com → 开发管理 → 开发设置 → 服务器域名 → **request 合法域名**，把你要用的服务域名加进去（例如 `https://api.deepseek.com`、`https://api.moonshot.cn`、`https://api.xiaomimimo.com`）。
 不配的话：开发者工具里勾「不校验合法域名」还能跑，**真机一定失败**。域名必须已备案，微信不接受 IP 地址。
 
 **安全边界（必须知道）**：Key 存在手机本地存储里，任何拿到你手机、或用调试工具读缓存的人都能读出来。这是纯本地架构的代价。所以：
