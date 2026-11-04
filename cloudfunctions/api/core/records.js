@@ -119,7 +119,7 @@ async function handleRecords({ owner, action, payload }, deps) {
     }
   }
   if (action === 'data.export') return deps.repository.transaction(owner, async tx => {
-    const collections = {}; for (const name of COLLECTIONS) collections[name] = await tx.list(owner, name);
+    const collections = {}; for (const name of ['profiles','semesters','courses','tasks','importDrafts','plans','planRevisions']) collections[name] = await tx.list(owner, name);
     return { format: 'study-agent/v1', json: JSON.stringify({ format: 'study-agent/v1', exportedAt: deps.now(), collections }) };
   });
   if (action === 'data.delete') {

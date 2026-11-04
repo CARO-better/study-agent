@@ -1,0 +1,44 @@
+'use strict';
+const { test } = require('node:test'); const assert=require('node:assert/strict');
+const api=require('../cloudfunctions/api'); const {createMemoryRepository}=require('../cloudfunctions/api/adapters/repository');
+const {extractScreenshot}=require('../cloudfunctions/api/adapters/ocr');
+const JPEG=Buffer.from([255,216,255,217]).toString('base64');
+// Screenshot recognition needs an uploaded, owner-bound ticket; tests that only
+// exercise the draft flow still have to prepare and upload one real file.
+function withStorage(base, extra={}){const deleted=[];const deps={cloudEnvId:'env-123',cloudFilePrefix:'cloud://env-123.bucket',cloud:{uploadFile:async({cloudPath})=>({fileID:`cloud://env-123.bucket/${cloudPath}`}),deleteFile:async({fileList})=>{deleted.push(...fileList);return {fileList:fileList.map(fileID=>({fileID,status:0}))};}},...base,...extra};return {deps,deleted};}
+async function uploadedTicket(call){const ticket=(await call('imports.prepareUpload')).data;const uploaded=await call('imports.upload',{ticketId:ticket.ticketId,base64:JPEG});assert.equal(uploaded.ok,true);return ticket.fileId;}
+test('OCR failure retains a reviewable draft without creating formal tasks',async()=>{let n=0;const {deps}=withStorage({repository:createMemoryRepository(),newId:()=>`r${++n}`,now:()=> '2026-11-04T00:00:00.000Z'},{ocr:async()=>{throw Error('offline')}});const call=(action,payload)=>api.handleAction({owner:'alice',action,payload},deps);const fileId=await uploadedTicket(call);const r=await call('imports.extractScreenshot',{fileId});assert.equal(r.ok,true);assert.equal(r.data.status,'draft');assert.ok(r.data.warnings.length);assert.equal((await call('tasks.list',{})).data.length,0);});
+test('upload tickets bind exact file paths to their owner and permit cleanup on expiry',async()=>{let n=0;const deleted=[];const deps={repository:createMemoryRepository(),newId:()=>`ticket${++n}`,now:()=> '2026-11-04T00:00:00.000Z',cloudEnvId:'env-123',cloudFilePrefix:'cloud://env-123.bucket',cloud:{uploadFile:async({cloudPath})=>({fileID:`cloud://env-123.bucket/${cloudPath}`}),deleteFile:async({fileList})=>{deleted.push(...fileList);return {fileList:fileList.map(fileID=>({fileID,status:0}))};}}}; const call=(owner,action,payload={})=>api.handleAction({owner,action,payload},deps);const ticket=(await call('alice','imports.prepareUpload')).data; const fileId=`cloud://env-123.bucket/${ticket.cloudPath}`; const denied=await call('bob','imports.extractScreenshot',{fileId}); assert.equal(denied.error.code,'NOT_FOUND'); assert.equal((await call('alice','imports.upload',{ticketId:ticket.ticketId,base64:JPEG})).ok,true); const draft=await call('alice','imports.extractScreenshot',{fileId}); assert.equal(draft.ok,true); deps.now=()=> '2026-11-05T00:00:00.000Z'; const {cleanupOwnerUploads}=require('../cloudfunctions/api/core/upload-cleanup'); await cleanupOwnerUploads('alice',deps); assert.deepEqual(deleted,[fileId]);});
+test('failed OCR draft can be repaired and abandoned without creating tasks',async()=>{let n=0;const {deps,deleted}=withStorage({repository:createMemoryRepository(),newId:()=>`r${++n}`,now:()=> '2026-11-04T00:00:00.000Z'},{ocr:async()=>{throw Error('offline')}});const call=(action,payload)=>api.handleAction({owner:'alice',action,payload},deps);const fileId=await uploadedTicket(call);const draft=(await call('imports.extractScreenshot',{fileId})).data;const edit=await call('imports.updateDraft',{id:draft.id,expectedVersion:draft.version,text:'作业',candidates:[{title:'作业',remainingMinutes:20}]});assert.equal(edit.ok,true);assert.equal(edit.data.candidates.length,1);const abandoned=await call('imports.abandon',{id:draft.id,expectedVersion:edit.data.version});assert.equal(abandoned.data.status,'abandoned');assert.equal((await call('tasks.list',{})).data.length,0);assert.deepEqual(deleted,[fileId]);});
+test('low confidence OCR requires explicit acknowledgement during confirmation',async()=>{let n=0;const {deps}=withStorage({repository:createMemoryRepository(),newId:()=>`r${++n}`,now:()=> '2026-11-04T00:00:00.000Z'},{ocr:async()=>({text:'作业',boxes:[{text:'作业',confidence:40}],warnings:['低置信度']})});const call=(action,payload)=>api.handleAction({owner:'alice',action,payload},deps);const fileId=await uploadedTicket(call);const draft=(await call('imports.extractScreenshot',{fileId})).data;const edit=(await call('imports.updateDraft',{id:draft.id,expectedVersion:draft.version,text:'作业',candidates:[{title:'作业',remainingMinutes:20}]})).data;const confirm=await call('imports.confirm',{id:edit.id,expectedVersion:edit.version,reviewed:true,choices:[{index:0,choice:'save',acknowledge:['dueAt']}]});assert.equal(confirm.error.code,'CONFIRMATION_REQUIRED');});
+test('server upload accepts only own ticket and validates image bytes',async()=>{let n=0;const writes=[];const deps={repository:createMemoryRepository(),newId:()=>`t${++n}`,now:()=> '2026-11-04T00:00:00.000Z',cloudEnvId:'env-123',cloudFilePrefix:'cloud://env-123.bucket',cloud:{uploadFile:async({cloudPath,fileContent})=>{writes.push(fileContent);return {fileID:`cloud://env-123.bucket/${cloudPath}`}}}};const call=(owner,action,payload={})=>api.handleAction({owner,action,payload},deps);const t=(await call('alice','imports.prepareUpload')).data;const jpg=Buffer.from([255,216,255,217]).toString('base64');assert.equal((await call('bob','imports.upload',{ticketId:t.ticketId,base64:jpg})).error.code,'NOT_FOUND');assert.equal((await call('alice','imports.upload',{ticketId:t.ticketId,base64:Buffer.from('bad').toString('base64')})).error.code,'VALIDATION');assert.equal((await call('alice','imports.upload',{ticketId:t.ticketId,base64:jpg})).ok,true);assert.equal(writes.length,1);});
+test('a ticket is single use, bound to its image type and unavailable without storage config', async () => {
+  let n = 0; const writes = [];
+  const deps = { repository: createMemoryRepository(), newId: () => `t${++n}`, now: () => '2026-11-04T00:00:00.000Z', cloudEnvId: 'env-123', cloudFilePrefix: 'cloud://env-123.bucket', cloud: { uploadFile: async ({ cloudPath, fileContent }) => { writes.push(fileContent); return { fileID: `cloud://env-123.bucket/${cloudPath}` }; } } };
+  const call = (action, payload = {}) => api.handleAction({ owner: 'alice', action, payload }, deps);
+  const jpg = Buffer.from([255, 216, 255, 217]).toString('base64');
+  const pending = (await call('imports.prepareUpload')).data;
+  // A prepared ticket alone must not let recognition pull an unchecked object.
+  assert.equal((await call('imports.extractScreenshot', { fileId: pending.fileId })).error.code, 'NOT_FOUND');
+  const pngTicket = (await call('imports.prepareUpload', { contentType: 'image/png' })).data;
+  assert.equal(pngTicket.cloudPath.endsWith('.png'), true);
+  assert.equal((await call('imports.upload', { ticketId: pngTicket.ticketId, base64: jpg })).error.code, 'VALIDATION');
+  const ticket = (await call('imports.prepareUpload')).data;
+  assert.equal((await call('imports.upload', { ticketId: ticket.ticketId, base64: `data:image/jpeg;base64,${jpg}` })).ok, true);
+  assert.equal((await call('imports.upload', { ticketId: ticket.ticketId, base64: jpg })).error.code, 'NOT_FOUND');
+  assert.equal(writes.length, 1);
+  const ocrDraft = await call('imports.extractScreenshot', { fileId: ticket.fileId });
+  assert.equal(ocrDraft.data.warnings[0], '截图识别尚未配置，可手动填写或先在设置中配置OCR');
+  const unconfigured = await api.handleAction({ owner: 'alice', action: 'imports.prepareUpload', payload: {} }, { repository: deps.repository, newId: deps.newId, now: deps.now });
+  assert.equal(unconfigured.error.code, 'OCR_UNCONFIGURED');
+});
+test('OCR calls are capped per China calendar day', async () => {
+  let n = 0; let calls = 0;
+  const storage = { cloudEnvId: 'env-123', cloudFilePrefix: 'cloud://env-123.bucket', cloud: { uploadFile: async ({ cloudPath }) => ({ fileID: `cloud://env-123.bucket/${cloudPath}` }) } };
+  const deps = { repository: createMemoryRepository(), newId: () => `r${++n}`, now: () => '2026-11-04T17:30:00.000Z', ocrDailyLimit: 1, ocrSecretId: 'id', ocrSecretKey: 'key', ocrRegion: 'ap-guangzhou', cloud: { downloadFile: async () => ({ fileContent: Buffer.from([255, 216, 255, 217]) }) }, ocrRequest: async () => { calls++; return { ok: true, json: async () => ({ Response: { TextDetections: [{ DetectedText: '作业', Confidence: 99 }] } }) }; } };
+  const prepared = (await api.handleAction({ owner: 'alice', action: 'imports.prepareUpload', payload: {} }, { ...deps, ...storage })).data;
+  await api.handleAction({ owner: 'alice', action: 'imports.upload', payload: { ticketId: prepared.ticketId, base64: JPEG } }, { ...deps, ...storage });
+  assert.equal((await extractScreenshot({ owner: 'alice', fileId: prepared.fileId }, deps)).text, '作业');
+  await assert.rejects(extractScreenshot({ owner: 'alice', fileId: prepared.fileId }, deps), error => error.code === 'USAGE_LIMIT');
+  assert.equal(calls, 1);
+});

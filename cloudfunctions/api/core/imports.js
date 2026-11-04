@@ -1,6 +1,11 @@
 'use strict';
 const { fail } = require('./errors');
 const { getRecord, writeRecord, isObject, date } = require('./records');
+const { cleanupOwnerUploads } = require('./upload-cleanup');
+// Confirming or abandoning a draft is the point where the original screenshot
+// stops being needed. Cleanup is best effort: a failure never blocks the user,
+// and the 24h sweep retries it.
+async function releaseScreenshots(owner, deps) { try { await cleanupOwnerUploads(owner, deps); } catch { /* retried by the sweep */ } }
 const normalTitle = value => String(value || '').trim().normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 function parseCandidate(candidate, referenceDate) {
   if (!isObject(candidate)) fail('VALIDATION');
@@ -25,6 +30,20 @@ function duplicateIds(candidate, tasks) {
 async function handleImports({ owner, action, payload }, deps) {
   if (action === 'imports.get') return getRecord(deps.repository, owner, 'importDrafts', payload.id);
   if (action === 'imports.list') return deps.repository.list(owner, 'importDrafts');
+  if (action === 'imports.updateDraft' || action === 'imports.abandon') {
+    const updated = await deps.repository.transaction(owner, async tx => {
+      const draft = await getRecord(tx, owner, 'importDrafts', payload.id);
+      if (draft.version !== payload.expectedVersion || draft.status !== 'draft') fail('CONFLICT');
+      if (Date.parse(deps.now()) >= Date.parse(draft.cleanupAfter)) fail('DRAFT_EXPIRED');
+      if (action === 'imports.abandon') return tx.save(owner, 'importDrafts', { ...draft, status:'abandoned', text:'', candidates:[], boxes:[] }, draft.version);
+      if (typeof payload.text !== 'string' || payload.text.length > 50000 || !Array.isArray(payload.candidates) || payload.candidates.length > 30) fail('VALIDATION');
+      const tasks = await tx.list(owner, 'tasks');
+      const candidates = payload.candidates.map(c => { const parsed = parseCandidate(c, draft.referenceDate); return { ...parsed, duplicateIds: duplicateIds(parsed, tasks) }; });
+      return tx.save(owner, 'importDrafts', { ...draft, text:payload.text, candidates }, draft.version);
+    });
+    if (action === 'imports.abandon') await releaseScreenshots(owner, deps);
+    return updated;
+  }
   if (action === 'imports.create') {
     if (!['text', 'screenshot'].includes(payload.source) || typeof payload.text !== 'string' || payload.text.length > 50000 || !Array.isArray(payload.candidates) || payload.candidates.length < 1 || payload.candidates.length > 30 || (payload.referenceDate !== undefined && !date(payload.referenceDate))) fail('VALIDATION');
     return deps.repository.transaction(owner, async tx => {
@@ -34,7 +53,7 @@ async function handleImports({ owner, action, payload }, deps) {
     });
   }
   if (action === 'imports.confirm') {
-    return deps.repository.transaction(owner, async tx => {
+    const result = await deps.repository.transaction(owner, async tx => {
       const draft = await getRecord(tx, owner, 'importDrafts', payload.id);
       if (draft.version !== payload.expectedVersion || draft.status !== 'draft') fail('CONFLICT');
       if (Date.parse(deps.now()) >= Date.parse(draft.cleanupAfter)) fail('DRAFT_EXPIRED');
@@ -51,6 +70,7 @@ async function handleImports({ owner, action, payload }, deps) {
         const candidate = draft.candidates[index]; const choice = choices.find(c => c.index === index);
         if (!choice || !['save', 'merge', 'skip'].includes(choice.choice)) fail('DUPLICATE_CHOICE_REQUIRED');
         if (choice.choice === 'skip') continue;
+        if (draft.boxes?.some(b => typeof b.confidence === 'number' && b.confidence < 80) && !choice.acknowledge?.includes('lowConfidence')) fail('CONFIRMATION_REQUIRED');
         const patch = choice.patch === undefined ? {} : choice.patch;
         if (!isObject(patch)) fail('VALIDATION');
         const merged = { ...candidate, ...patch };
@@ -76,15 +96,21 @@ async function handleImports({ owner, action, payload }, deps) {
       const confirmed = await tx.save(owner, 'importDrafts', { ...draft, status: 'confirmed', confirmedAt: deps.now(), taskIds: tasks.map(t => t.id) }, draft.version);
       return { draft: confirmed, tasks };
     });
+    await releaseScreenshots(owner, deps);
+    return result;
   }
-  if (action === 'imports.markExpired') return deps.repository.transaction(owner, async tx => {
-    const drafts = await tx.list(owner, 'importDrafts'); let count = 0;
-    for (const draft of drafts) if (draft.status === 'draft' && Date.parse(deps.now()) >= Date.parse(draft.cleanupAfter)) {
-      // Raw recognition material is discarded on expiry; ID/version remain for conflict handling.
-      await tx.save(owner, 'importDrafts', { ...draft, status: 'expired', text: '', candidates: [], cleanupMarkedAt: deps.now() }, draft.version); count++;
-    }
-    return { count };
-  });
+  if (action === 'imports.markExpired') {
+    const result = await deps.repository.transaction(owner, async tx => {
+      const drafts = await tx.list(owner, 'importDrafts'); let count = 0;
+      for (const draft of drafts) if (draft.status === 'draft' && Date.parse(deps.now()) >= Date.parse(draft.cleanupAfter)) {
+        // Raw recognition material is discarded on expiry; ID/version remain for conflict handling.
+        await tx.save(owner, 'importDrafts', { ...draft, status: 'expired', text: '', candidates: [], boxes: [], cleanupMarkedAt: deps.now() }, draft.version); count++;
+      }
+      return { count };
+    });
+    // Same explicit sweep releases expired or finished screenshots for this owner.
+    return { ...result, uploads: await cleanupOwnerUploads(owner, deps) };
+  }
   fail('UNKNOWN_ACTION');
 }
 module.exports = { handleImports, parseCandidate, duplicateIds };

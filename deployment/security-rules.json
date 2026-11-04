@@ -27,6 +27,18 @@
     "read": false,
     "write": false
   },
+  "providerSettings": {
+    "read": false,
+    "write": false
+  },
+  "providerUsage": {
+    "read": false,
+    "write": false
+  },
+  "uploadTickets": {
+    "read": false,
+    "write": false
+  },
   "plans": {
     "read": "auth != null && doc.ownerOpenId == auth.openid",
     "write": false

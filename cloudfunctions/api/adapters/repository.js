@@ -1,7 +1,7 @@
 'use strict';
 const { createHash } = require('node:crypto');
 const { fail } = require('../core/errors');
-const COLLECTIONS = Object.freeze(['profiles', 'semesters', 'courses', 'tasks', 'importDrafts', 'plans', 'planRevisions']);
+const COLLECTIONS = Object.freeze(['profiles', 'semesters', 'courses', 'tasks', 'importDrafts', 'plans', 'planRevisions', 'providerSettings', 'providerUsage', 'uploadTickets']);
 const clone = value => value == null ? value : structuredClone(value);
 function check(owner, collection, id) {
   if (typeof owner !== 'string' || !owner.trim()) fail('UNAUTHENTICATED');
