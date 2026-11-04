@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+- 仓库：仓库转为公开。公开前做了全历史扫描（76 个路径、全部提交），没有 Key、私钥、`.env`、本地配置或手机号/邮箱；`project.config.json` 保留项目自身的 AppID（它是公开标识、不是密钥），README 说明其他使用者应替换为自己的 AppID。
+- 仓库：新增 MIT LICENSE。
 - 文档：AGENTS.md 增加「每次重大改动后必须更新更新日志并推送到 origin/codex/study-agent」的固定动作，推送后要用 `git ls-remote` 核对哈希。
 - 文档：新增详细Agent交接入口，归档已批准设计、开发计划与关键审阅证据。
 - 后端（未部署）：补齐截图上传链路 `imports.prepareUpload` 与 `imports.upload`。票据绑定所有者且只能使用一次，24 小时有效；图片必须是真的 JPEG/PNG 字节并与票据声明的类型一致；存储路径由服务端按所有者哈希生成，客户端不能指定写入位置。
