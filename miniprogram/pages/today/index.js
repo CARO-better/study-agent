@@ -1,5 +1,7 @@
 const planner = require('../../lib/planner');
+const inbox = require('../../lib/inbox');
 const KEY = 'study_trial_v1';
+const INBOX_KEY = 'study_inbox_v1';
 const types = ['作业','实验','考试','其他'];
 const priorities = ['低','中','高'];
 function localDate(d) { d = d || new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -8,11 +10,15 @@ function display(v) { const d=new Date(v); return localDate(d)+' '+String(d.getH
 function fresh(){ return {courses:[],tasks:[],availability:[],blocks:[],unscheduled:[],previous:null}; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 Page({
- data:{tab:'今日',tabs:['今日','课程','计划','设置'],store:fresh(),types,priorities,courseNames:['未关联课程'],courseForm:{},taskForm:{},availabilityForm:{},editing:'',today:localDate(),typeIndex:0,priorityIndex:1,courseIndex:0},
- onLoad(){ let saved=wx.getStorageSync(KEY); this.setData({store:saved && saved.courses ? saved : fresh()}); this.refresh(); },
- save(){wx.setStorageSync(KEY,this.data.store); this.refresh();},
+ data:{tab:'今日',tabs:['今日','课程','计划','设置'],store:fresh(),types,priorities,courseNames:['未关联课程'],courseForm:{},taskForm:{},availabilityForm:{},editing:'',today:localDate(),typeIndex:0,priorityIndex:1,courseIndex:0,inboxMessages:[],unread:0,showInbox:false},
+ onLoad(){ let saved=wx.getStorageSync(KEY); this.setData({store:saved && saved.courses ? saved : fresh()}); this.refresh(); this.refreshInbox(); },
+ save(){wx.setStorageSync(KEY,this.data.store); this.refresh(); this.refreshInbox();},
  refresh(){const s=this.data.store; const names=['未关联课程'].concat(s.courses.map(c=>c.semester+' · '+c.name)); const courseName=id=>{const c=s.courses.find(x=>x.id===id);return c?c.name:'未关联课程'}; const tasks=s.tasks.map(t=>Object.assign({},t,{courseName:courseName(t.courseId),typeLabel:types[t.typeIndex]||'作业',priorityLabel:priorities[t.priorityIndex]||'中'})); const blocks=s.blocks.map(b=>{const t=s.tasks.find(x=>x.id===b.taskId); return Object.assign({},b,{title:t?t.title:'已删除任务',timeLabel:display(b.start)+' - '+display(b.end).slice(11)});}); const reasons={overdue:'已过截止时间',no_availability:'没有可用时段',below_minimum:'剩余时间不足 30 分钟',insufficient_time:'可用时间不足'}; const unscheduled=(s.unscheduled||[]).map(u=>{const t=s.tasks.find(x=>x.id===u.taskId);return Object.assign({},u,{title:t?t.title:'任务',reasonLabel:reasons[u.reason]||u.reason});}); this.setData({courseNames:names,tasks,blocks,unscheduled,availability:s.availability});},
  switchTab(e){this.setData({tab:e.currentTarget.dataset.tab,editing:''});},
+ refreshInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const base=saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(); const next=inbox.upsertDigest(base,inbox.buildDigest(this.data.store.tasks,{date:today,now:new Date().toISOString()})); wx.setStorageSync(INBOX_KEY,next); this.setData({today,inboxMessages:next.messages.map(m=>({date:m.date,summary:inbox.summaryText(m),items:m.items})),unread:inbox.unreadBadge(next,today)});},
+ openInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const next=inbox.markRead(saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(),today); wx.setStorageSync(INBOX_KEY,next); this.setData({showInbox:true,unread:0});},
+ closeInbox(){this.setData({showInbox:false});},
+ toggleFromInbox(e){const id=e.currentTarget.dataset.id; let s=this.data.store,t=s.tasks.find(x=>x.id===id); if(!t)return; t.status=t.status==='completed'?'open':'completed'; this.setData({store:s}); this.save();},
  openCourse(e){const id=e.currentTarget.dataset.id; const item=this.data.store.courses.find(c=>c.id===id);this.setData({editing:'course',courseForm:item?Object.assign({},item):{name:'',semester:''}});},
  openTask(e){const id=e.currentTarget.dataset.id; const item=this.data.store.tasks.find(t=>t.id===id);const f=item?Object.assign({},item):{title:'',courseId:'',typeIndex:0,priorityIndex:1,dueAt:localDate(),remainingMinutes:60}; let ci=this.data.store.courses.findIndex(c=>c.id===f.courseId)+1;this.setData({editing:'task',taskForm:f,typeIndex:f.typeIndex||0,priorityIndex:f.priorityIndex==null?1:f.priorityIndex,courseIndex:ci});},
  openAvailability(){this.setData({editing:'availability',availabilityForm:{date:localDate(),start:'19:00',end:'21:00'}});},
