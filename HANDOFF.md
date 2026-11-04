@@ -59,7 +59,7 @@
 | 本地试用原型 | 已交付给用户；开发工具实际运行过首页，新任务表单可打开 | `1589416`、prototype-report及本交接第6节 |
 | 版本文档和发布规则 | 已提交 | `3db4d68` |
 | Task4 模型/安全请求/OCR | 本地实现完成，`npm test` 65项全通过；**未部署、未真机、未接入原型** | 见第5节 |
-| Task5 B站检索与推荐 | 正式功能未实现；只有早期公开搜索可用性探测 | deployment/INTEGRATIONS.md |
+| Task5 B站检索与推荐 | 后端已实现（`resources.search`/`resources.recommend`，真实结果+排序+`BILI_UNAVAILABLE`）；未部署、未接界面、未真联调 | `eb2c6d8` 之后的提交、`core/resources.js`、`adapters/bilibili.js` |
 | Task6 微信定时提醒 | 未实现生产发送链路与真实投递 | 用户确认权限不等于代码已实现 |
 | Task7 完整云端界面 | 未完成；现有为本地简化雏形，不是完整任务7 |
 | Task8 集成/真机/部署 | 未完成；不允许宣称正式上线 |

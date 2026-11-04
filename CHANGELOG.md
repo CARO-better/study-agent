@@ -4,6 +4,9 @@
 
 ## [未发布]
 
+- 后端（未部署）：新增 `resources.search` 与 `resources.recommend`，走 B 站公开检索接口（WBI 签名），返回真实 bvid、规范链接、作者、时长、播放量与检索时间；排序依据课程/考点命中、复习类标题、剩余时间内的时长、播放量，并给出可解释的 `reasons`。检索失败返回 `BILI_UNAVAILABLE`，不生成猜测链接。
+- 后端（未部署）：任务新增可选字段 `mastery`（low/medium/high），用于推荐时优先推送掌握度低的内容。
+- 文档：新增 `docs/SETUP-REQUIRED.md`，列清哪些凭据与配置必须由用户本人填写。
 - 仓库：仓库转为公开。公开前做了全历史扫描（76 个路径、全部提交），没有 Key、私钥、`.env`、本地配置或手机号/邮箱；`project.config.json` 保留项目自身的 AppID（它是公开标识、不是密钥），README 说明其他使用者应替换为自己的 AppID。
 - 仓库：新增 MIT LICENSE。
 - 文档：AGENTS.md 增加「每次重大改动后必须更新更新日志并推送到 origin/codex/study-agent」的固定动作，推送后要用 `git ls-remote` 核对哈希。

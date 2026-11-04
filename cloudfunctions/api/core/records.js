@@ -5,7 +5,7 @@ const fields = Object.freeze({
   profiles: ['displayName', 'timezone', 'studyGoal'],
   semesters: ['name', 'startDate', 'endDate', 'teachingWeeks'],
   courses: ['name', 'semesterId', 'teacher', 'schedule', 'notes'],
-  tasks: ['title', 'description', 'type', 'status', 'dueAt', 'courseId', 'parentTaskId', 'examScope', 'remainingMinutes', 'estimatedMinutes', 'personalResponsibility', 'schedule', 'priority', 'fixed', 'completedAt']
+  tasks: ['title', 'description', 'type', 'status', 'dueAt', 'courseId', 'parentTaskId', 'examScope', 'remainingMinutes', 'estimatedMinutes', 'personalResponsibility', 'schedule', 'priority', 'fixed', 'mastery', 'completedAt']
 });
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 function text(value, max = 2000) { return typeof value === 'string' && value.trim().length > 0 && value.length <= max; }
@@ -33,6 +33,7 @@ function validate(collection, record) {
     if (record.schedule !== undefined && !schedule(record.schedule)) fail('VALIDATION');
     if (record.priority !== undefined && !['low', 'medium', 'high'].includes(record.priority)) fail('VALIDATION');
     if (record.fixed !== undefined && typeof record.fixed !== 'boolean') fail('VALIDATION');
+    if (record.mastery !== undefined && !['low', 'medium', 'high'].includes(record.mastery)) fail('VALIDATION');
     for (const key of ['courseId', 'parentTaskId']) if (record[key] != null && !text(record[key], 128)) fail('VALIDATION');
   }
   for (const key of ['description', 'notes', 'teacher', 'studyGoal']) if (record[key] !== undefined && (typeof record[key] !== 'string' || record[key].length > 10000)) fail('VALIDATION');

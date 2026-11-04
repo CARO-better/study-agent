@@ -21,7 +21,7 @@ All saved records include `id,ownerOpenId,version,createdAt,updatedAt`; version 
 | profiles | required displayName; timezone defaults to Asia/Shanghai; optional studyGoal |
 | semesters | name,startDate,endDate (YYYY-MM-DD),teachingWeeks (1..60) |
 | courses | name,semesterId; optional teacher,notes; schedule defaults [] |
-| tasks | title,remainingMinutes; type assignment/experiment/exam/group/study/other (default assignment); status pending/in_progress/completed/cancelled (default pending); optional dueAt,courseId,parentTaskId,description,examScope,estimatedMinutes,personalResponsibility,schedule,priority(low/medium/high),fixed |
+| tasks | title,remainingMinutes; type assignment/experiment/exam/group/study/other (default assignment); status pending/in_progress/completed/cancelled (default pending); optional dueAt,courseId,parentTaskId,description,examScope,estimatedMinutes,personalResponsibility,schedule,priority(low/medium/high),mastery(low/medium/high),fixed |
 
 Course schedule is `[{weekday:1..7,weeks:[1..60],periods:[1..24],location?}]`; task schedule uses one such object. Weeks must fit the linked semester for course schedules. Semester-week reductions that would invalidate an existing course schedule are rejected atomically. `examScope` accepts a string or string array. Completed timestamps are server controlled. Parent chains cannot cycle, cross owners, or cross courses; a parent course change incompatible with existing children is rejected atomically. Experiments use type `experiment`. Manually updating task status is allowed, including reopening; reminder logic must check current status. No planner/provider/reminder behavior is implemented here.
 
@@ -52,6 +52,14 @@ Outbound HTTPS goes through `safeRequest`: HTTPS only, no credentials in the URL
 `core/upload-cleanup.js` exports `cleanupOwnerUploads(owner,deps)` for a trusted scheduler; it is not a public action and takes the owner from server-owned data. It deletes storage for expired tickets and for drafts already confirmed, abandoned or expired, keeps a ticket until CloudBase confirms the deletion, and retries failures on the next run. `imports.abandon` and `imports.confirm` release the screenshot immediately on a best-effort basis, and `imports.markExpired` returns `{count,uploads}` after sweeping the same owner's uploads. No cross-owner timer is deployed, so a user who never opens the mini program again keeps the object until the 24h sweep of a later run; the scheduled trigger and a global index still have to be designed at deployment time.
 
 Verification boundary for this section: the behaviour above is covered by `tests/providers.test.js` and `tests/imports.test.js` against an in-memory repository with stubbed model, OCR, network and storage. No CloudBase environment, OCR credential, model key or real request has been used, nothing is deployed, and the daily caps are counters rather than vendor billing limits. Because `imports.upload` passes the image through a cloud function event, clients must downscale screenshots to stay inside the platform's call payload limit.
+
+## Bilibili resources
+
+`resources.search {keyword,limit?}` and `resources.recommend {taskIds?,maxTasks?,limitPerTask?}` return real Bilibili search results: each item carries `bvid`, `title`, `author`, canonical `https://www.bilibili.com/video/<bvid>` URL, `durationSeconds`, `play` and `publishedAt`, and every payload carries `source:'bilibili-search'` plus `fetchedAt`. Nothing is synthesised: a refused or unsigned request returns `BILI_UNAVAILABLE` instead of guessed links.
+
+Search uses the public WBI-signed web endpoint. `STUDY_BILI_COOKIE` is optional and only needed when anonymous calls are rate limited (`-412`). Titles and descriptions are reduced to plain text; `<em>` highlight markup is stripped.
+
+`resources.recommend` picks at most 5 open tasks (exam type first, then priority, then lower `mastery`, then earlier deadline), builds one keyword per task from the linked course name plus up to two `examScope` terms (falling back to the task title when neither exists), and ranks each result set by observable signals only: title contains the course or a scope term, review-oriented wording, duration against the task's remaining minutes, and view count. Each item carries `score` and a short `reasons` list so the UI can explain the order. Results are not cached or persisted; repeated calls re-query Bilibili.
 
 ## Export and deletion
 
