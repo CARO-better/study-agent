@@ -30,6 +30,10 @@
 
 云函数依赖安装、CloudBase环境、数据库权限和部署说明见 cloudfunctions/api/README.md、deployment/INTEGRATIONS.md。不要把真实模型Key、AppSecret、环境文件和开发工具私有配置提交到仓库。
 
+## Agent接手
+
+请先阅读 [HANDOFF.md](HANDOFF.md) 与 [AGENTS.md](AGENTS.md)，再继续现有项目；不要覆盖未提交的模型/OCR工作。
+
 ## 版本文档
 
 - [更新日志](CHANGELOG.md)
