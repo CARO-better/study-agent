@@ -39,6 +39,7 @@ async function handlePlanner({owner,action,payload},deps) {
     if(!Number.isInteger(payload.expectedVersion)||payload.expectedVersion!==version) fail('CONFLICT');
     if(action==='plan.undo') {
       if(!current || typeof payload.revisionId!=='string') fail('VALIDATION');
+      if(current.status==='needs_attention') return {plan:current,conflicts:[{reason:'plan_needs_attention'}]};
       const revision=await getRecord(tx,owner,'planRevisions',payload.revisionId);
       const tasks=await tx.list(owner,'tasks'); const undone=undoRevision({...current,tasks,now:deps.now()},revision,payload.expectedVersion);
       if(revision.environmentVersion!==await environmentVersion(tx,owner)) undone.conflicts.push({reason:'settings_changed'});
@@ -62,16 +63,27 @@ async function handlePlanner({owner,action,payload},deps) {
     const settings=await config(tx,owner,deps.now()); if(settings.configurationNeeded) return settings;
     let tasks=await tx.list(owner,'tasks'); const changes=payload.changes||[];
     const affected=new Set(Array.isArray(changes)?changes.map(c=>c?.id):[]); const now=Date.parse(settings.now);
-    const retained=(current?.blocks||[]).filter(b=>b.locked || Date.parse(b.start)<now || (action==='plan.progress' && !affected.has(b.taskId)));
+    const retained=(current?.blocks||[]).filter(b=>b.locked || Date.parse(b.start)<now || (action==='plan.progress' && current?.status!=='needs_attention' && !affected.has(b.taskId)));
     const conflicts=retained.filter(b=>Date.parse(b.end)>now && settings.fixedBlocks.some(c=>Date.parse(b.start)<Date.parse(c.end) && Date.parse(b.end)>Date.parse(c.start))).map(b=>({reason:'class_overlap',blockId:b.id,taskId:b.taskId}));
     if(action==='plan.progress') {
       if(!current || !Array.isArray(changes)||!changes.length||changes.length>50||!changes.every(isObject)||new Set(changes.map(c=>c.id)).size!==changes.length) fail('VALIDATION');
       for(const c of changes) { if(!isObject(c)||!Number.isInteger(c.expectedVersion)||(c.completed!==undefined && typeof c.completed!=='boolean')||!Number.isInteger(c.remainingMinutes)||c.remainingMinutes<0||c.remainingMinutes>100000) fail('VALIDATION'); const t=await getRecord(tx,owner,'tasks',c.id); if(t.version!==c.expectedVersion) fail('CONFLICT'); if(['completed','cancelled'].includes(t.status)) fail('CONFLICT'); const saved=await writeRecord(tx,owner,'tasks',{remainingMinutes:c.remainingMinutes,status:c.completed===true?'completed':'in_progress'},t,t.version,deps); tasks=tasks.map(item=>item.id===saved.id?saved:item); }
     }
-    if(conflicts.length) return {plan:current,conflicts,...(action==='plan.progress'?{status:'needs_attention'}:{})};
+    for(const task of tasks) {
+      const locked=retained.filter(b=>b.locked && b.taskId===task.id && Date.parse(b.end)>now);
+      const minutes=locked.reduce((n,b)=>n+(Date.parse(b.end)-Math.max(now,Date.parse(b.start)))/60000,0);
+      if(locked.length && (['completed','cancelled'].includes(task.status)||minutes>task.remainingMinutes)) conflicts.push({reason:'locked_work_incompatible',taskId:task.id});
+    }
+    if(conflicts.length) {
+      if(action==='plan.progress' || (current && current.status==='needs_attention')) {
+        const plan=await tx.save(owner,'plans',{...current,status:'needs_attention',attentionConflicts:conflicts},version);
+        return {plan,conflicts,status:'needs_attention'};
+      }
+      return {plan:current,conflicts};
+    }
     const before=current?.blocks||[];
     const state={...settings,tasks,blocks:before,unscheduled:current?.unscheduled||[],reasons:current?.reasons||[],version};
-    const result=replan(state,{id:deps.newId(),taskIds:changes.map(c=>c.id),reason:action==='plan.progress'?'progress':'generate'});
+    const result=replan(state,{id:deps.newId(),taskIds:changes.map(c=>c.id),reason:action==='plan.progress' && current?.status!=='needs_attention'?'progress':'generate'});
     result.plan.blocks=result.plan.blocks.map(b=>b.id?b:{...b,id:deps.newId()}); result.revision.afterBlocks=structuredClone(result.plan.blocks); result.revision.addedBlocks=result.plan.blocks.filter(b=>!before.some(old=>old.id===b.id));
     result.revision.environmentVersion=await environmentVersion(tx,owner);
     const revision=await tx.save(owner,'planRevisions',result.revision,0);
