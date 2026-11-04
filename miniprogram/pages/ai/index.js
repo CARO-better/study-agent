@@ -75,6 +75,18 @@ Page({
   },
   clearImage() { this.setData({ pendingImage: '' }); },
   input(e) { this.setData({ input: e.detail.value }); },
+  confirmDelete(task) {
+    return new Promise((resolve) => {
+      wx.showModal({
+        title: '删除任务？',
+        content: `「${task.title}」删除后无法恢复。`,
+        confirmText: '删除',
+        confirmColor: '#D64545',
+        success: result => resolve(Boolean(result.confirm)),
+        fail: () => resolve(false)
+      });
+    });
+  },
   async send() {
     const text = this.data.input.trim();
     const image = this.data.pendingImage;
@@ -92,8 +104,17 @@ Page({
       const result = await ai.runAgent({
         messages: [{ role: 'system', content: ai.systemPrompt({ date: this.data.today, courses: this.store.courses, tasks: this.store.tasks }) }, ...this.history.slice(-10)],
         request: (history) => ai.requestModel({ settings: this.data.settings, messages: history, tools: tools.TOOLS }),
-        execute: (name, args) => {
+        execute: async (name, args) => {
           const outcome = tools.executeTool(this.store, name, args, { now: new Date().toISOString(), date: this.data.today, id: () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7) });
+          // 删除不在工具里直接执行：先问用户，确认后才真正移除。
+          if (outcome.result && outcome.result.needsConfirmation) {
+            const approved = await this.confirmDelete(outcome.result.task);
+            if (!approved) return { store: this.store, result: { ok: false, reason: '用户取消了删除' } };
+            const removed = tools.removeTask(this.store, outcome.result.task.id);
+            this.store = removed.store;
+            wx.setStorageSync(KEY, this.store);
+            return removed;
+          }
           this.store = outcome.store;
           wx.setStorageSync(KEY, this.store);
           return outcome;

@@ -29,6 +29,23 @@ function findTask(store, title) {
     || null;
 }
 
+// 模糊匹配：先找完全同名的，再退到"包含"。多条命中时返回候选，交给用户选，
+// 不替用户决定删哪一条。
+function findTaskCandidates(store, title) {
+  const target = normalize(title);
+  if (!target) return [];
+  const exact = store.tasks.filter(task => normalize(task.title) === target);
+  if (exact.length) return exact;
+  return store.tasks.filter(task => {
+    const name = normalize(task.title);
+    return name.includes(target) || target.includes(name);
+  });
+}
+
+function brief(task) {
+  return { id: task.id, title: task.title, dueAt: task.dueAt || null, status: task.status || 'open' };
+}
+
 function createTask(store, args, { now, id }) {
   const title = String(args.title || '').trim();
   if (!title) return { store, result: { ok: false, reason: '缺少任务标题' } };
@@ -78,6 +95,35 @@ function updateTaskStatus(store, args) {
   return {
     store: { ...store, tasks: store.tasks.map(item => (item.id === task.id ? { ...item, status, version: (item.version || 0) + 1 } : item)) },
     result: { ok: true, id: task.id, title: task.title, status }
+  };
+}
+
+// 删除分两步：工具本身不动数据，只说明命中了哪一条；页面弹确认框后调 removeTask。
+function deleteTask(store, args) {
+  const title = String(args.title || '').trim();
+  if (!title) return { store, result: { ok: false, reason: '缺少要删除的任务标题' } };
+  const matches = findTaskCandidates(store, title);
+  if (!matches.length) return { store, result: { ok: false, reason: `找不到任务「${title}」，可以先让我列一下` } };
+  if (matches.length > 1) {
+    return {
+      store,
+      result: { ok: false, ambiguous: true, reason: '有多条任务匹配，需要用户确认删哪一条', candidates: matches.slice(0, 5).map(brief) }
+    };
+  }
+  return { store, result: { ok: false, needsConfirmation: true, reason: '删除需要用户在界面上确认', task: brief(matches[0]) } };
+}
+
+function removeTask(store, id) {
+  const task = store.tasks.find(item => item.id === id);
+  if (!task) return { store, result: { ok: false, reason: '任务已不存在，可能已被删除' } };
+  return {
+    store: {
+      ...store,
+      tasks: store.tasks.filter(item => item.id !== id),
+      blocks: (store.blocks || []).filter(block => block.taskId !== id),
+      unscheduled: (store.unscheduled || []).filter(entry => entry.taskId !== id)
+    },
+    result: { ok: true, id, title: task.title }
   };
 }
 
@@ -150,6 +196,18 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'delete_task',
+      description: '删除一条任务。工具不会直接删除：会返回 needsConfirmation 或候选列表，需要用户在界面上确认。',
+      parameters: {
+        type: 'object',
+        required: ['title'],
+        properties: { title: { type: 'string', description: '要删除的任务标题，尽量用用户说的原话' } }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'list_tasks',
       description: '查询当前未完成任务，用于回答“我还有哪些事”。',
       parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['all', 'today', 'overdue'] } } }
@@ -162,8 +220,9 @@ function executeTool(store, name, args, context) {
   if (name === 'create_task') return createTask(store, input, context);
   if (name === 'create_course') return createCourse(store, input, context);
   if (name === 'update_task_status') return updateTaskStatus(store, input);
+  if (name === 'delete_task') return deleteTask(store, input);
   if (name === 'list_tasks') return listTasks(store, input, context);
   return { store, result: { ok: false, reason: `不支持的动作 ${name}` } };
 }
 
-module.exports = { TOOLS, executeTool, findCourse, findTask, TYPE_INDEX, PRIORITY_INDEX };
+module.exports = { TOOLS, executeTool, removeTask, findCourse, findTask, findTaskCandidates, TYPE_INDEX, PRIORITY_INDEX };

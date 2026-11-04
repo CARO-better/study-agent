@@ -42,9 +42,10 @@ function systemPrompt({ date, courses = [], tasks = [] }) {
     '规则：',
     '1. 要新增或修改数据时，必须调用工具，不能只在回复里描述。',
     '2. 日期一律 YYYY-MM-DD；截图或原话里没有明确日期就不要猜，留空并说明。',
-    '3. 不要删除任何数据，不要改写已有任务的标题和截止日期。',
-    '4. 截图里只提取明确写出的信息，看不清的字段要问用户，不要编造。',
-    '5. 用中文简短回复，说清你做了什么。'
+    '3. 删除任务必须调用 delete_task，由用户在界面上确认；工具返回 needsConfirmation 或 ambiguous 时不要声称已经删除，ambiguous 时把候选标题念给用户挑。',
+    '4. 不要改写已有任务的标题和截止日期。',
+    '5. 截图里只提取明确写出的信息，看不清的字段要问用户，不要编造。',
+    '6. 用中文简短回复，说清你做了什么。'
   ].join('\n');
 }
 
@@ -109,6 +110,12 @@ function describeRecords(records) {
     if (record.name === 'create_task') return result.ok ? `已添加任务「${result.task.title}」` : `没添加：${result.reason}`;
     if (record.name === 'create_course') return result.ok ? `已添加课程「${result.course.name}」` : `没添加：${result.reason}`;
     if (record.name === 'update_task_status') return result.ok ? `已把「${result.title}」标记为${result.status === 'completed' ? '完成' : '未完成'}` : `没改：${result.reason}`;
+    if (record.name === 'delete_task') {
+      if (result.ok) return `已删除「${result.title}」`;
+      if (result.needsConfirmation) return `等你确认是否删除「${result.task.title}」`;
+      if (result.ambiguous) return `有多条匹配：${(result.candidates || []).map(item => item.title).join('、')}`;
+      return `没删除：${result.reason}`;
+    }
     if (record.name === 'list_tasks') return `查询到 ${result.count} 条未完成任务`;
     return '完成一次操作';
   });

@@ -93,6 +93,43 @@ test('system prompt carries the date and forbids guessing deadlines', () => {
   assert.match(prompt, /不要猜/);
 });
 
+test('deleting a task needs an explicit confirmation and never removes it by itself', () => {
+  const store = emptyStore();
+  const single = tools.executeTool(store, 'delete_task', { title: '实验报告' }, context());
+  assert.equal(single.result.ok, false);
+  assert.equal(single.result.needsConfirmation, true);
+  assert.equal(single.store.tasks.length, 1, 'the tool must not delete anything');
+  assert.equal(single.result.task.title, '实验报告');
+});
+
+test('ambiguous names come back as candidates instead of picking one', () => {
+  const store = { ...emptyStore(), tasks: [
+    { id: 'a', title: '实验报告', status: 'open' },
+    { id: 'b', title: '实验报告二', status: 'open' }
+  ] };
+  // 「实验」没有完全同名项，才会落到模糊匹配并出现多个候选
+  const outcome = tools.executeTool(store, 'delete_task', { title: '实验' }, context());
+  assert.equal(outcome.result.ambiguous, true);
+  assert.equal(outcome.store.tasks.length, 2);
+  assert.deepEqual(outcome.result.candidates.map(item => item.title), ['实验报告', '实验报告二']);
+  // 完全同名时不再歧义，直接进入待确认
+  const exact = tools.executeTool(store, 'delete_task', { title: '实验报告' }, context());
+  assert.equal(exact.result.needsConfirmation, true);
+});
+
+test('removeTask drops the task together with its plan blocks and unscheduled rows', () => {
+  const store = {
+    ...emptyStore(),
+    blocks: [{ taskId: 't1', start: 'x', end: 'y' }, { taskId: 'other', start: 'x', end: 'y' }],
+    unscheduled: [{ taskId: 't1', reason: 'no_availability' }]
+  };
+  const result = tools.removeTask(store, 't1');
+  assert.equal(result.result.ok, true);
+  assert.deepEqual(result.store.tasks.map(task => task.id), []);
+  assert.deepEqual(result.store.blocks.map(block => block.taskId), ['other']);
+  assert.equal(result.store.unscheduled.length, 0);
+});
+
 test('records are described in Chinese for the chat transcript', () => {
   const lines = ai.describeRecords([
     { name: 'create_task', result: { ok: true, task: { title: '线代作业' } } },
