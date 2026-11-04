@@ -40,7 +40,7 @@ async function handlePlanner({owner,action,payload},deps) {
     if(action==='plan.undo') {
       if(!current || typeof payload.revisionId!=='string') fail('VALIDATION');
       const revision=await getRecord(tx,owner,'planRevisions',payload.revisionId);
-      const tasks=await tx.list(owner,'tasks'); const undone=undoRevision({...current,tasks},revision,payload.expectedVersion);
+      const tasks=await tx.list(owner,'tasks'); const undone=undoRevision({...current,tasks,now:deps.now()},revision,payload.expectedVersion);
       if(revision.environmentVersion!==await environmentVersion(tx,owner)) undone.conflicts.push({reason:'settings_changed'});
       if(undone.conflicts.length) return {plan:current,conflicts:undone.conflicts};
       const restored=await tx.save(owner,'plans',{...current,blocks:undone.plan.blocks,unscheduled:undone.plan.unscheduled,reasons:undone.plan.reasons,lastRevisionId:null},version);
@@ -64,11 +64,11 @@ async function handlePlanner({owner,action,payload},deps) {
     const affected=new Set(Array.isArray(changes)?changes.map(c=>c?.id):[]); const now=Date.parse(settings.now);
     const retained=(current?.blocks||[]).filter(b=>b.locked || Date.parse(b.start)<now || (action==='plan.progress' && !affected.has(b.taskId)));
     const conflicts=retained.filter(b=>Date.parse(b.end)>now && settings.fixedBlocks.some(c=>Date.parse(b.start)<Date.parse(c.end) && Date.parse(b.end)>Date.parse(c.start))).map(b=>({reason:'class_overlap',blockId:b.id,taskId:b.taskId}));
-    if(conflicts.length) return {plan:current,conflicts};
     if(action==='plan.progress') {
-      if(!current || !Array.isArray(changes)||!changes.length||changes.length>50||new Set(changes.map(c=>c.id)).size!==changes.length) fail('VALIDATION');
+      if(!current || !Array.isArray(changes)||!changes.length||changes.length>50||!changes.every(isObject)||new Set(changes.map(c=>c.id)).size!==changes.length) fail('VALIDATION');
       for(const c of changes) { if(!isObject(c)||!Number.isInteger(c.expectedVersion)||(c.completed!==undefined && typeof c.completed!=='boolean')||!Number.isInteger(c.remainingMinutes)||c.remainingMinutes<0||c.remainingMinutes>100000) fail('VALIDATION'); const t=await getRecord(tx,owner,'tasks',c.id); if(t.version!==c.expectedVersion) fail('CONFLICT'); if(['completed','cancelled'].includes(t.status)) fail('CONFLICT'); const saved=await writeRecord(tx,owner,'tasks',{remainingMinutes:c.remainingMinutes,status:c.completed===true?'completed':'in_progress'},t,t.version,deps); tasks=tasks.map(item=>item.id===saved.id?saved:item); }
     }
+    if(conflicts.length) return {plan:current,conflicts,...(action==='plan.progress'?{status:'needs_attention'}:{})};
     const before=current?.blocks||[];
     const state={...settings,tasks,blocks:before,unscheduled:current?.unscheduled||[],reasons:current?.reasons||[],version};
     const result=replan(state,{id:deps.newId(),taskIds:changes.map(c=>c.id),reason:action==='plan.progress'?'progress':'generate'});

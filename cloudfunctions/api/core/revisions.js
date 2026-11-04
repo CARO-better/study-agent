@@ -14,6 +14,7 @@ function undoRevision(state,revision,expectedVersion) {
   const conflicts=[];
   if (!revision || state.version!==expectedVersion || revision.toVersion!==expectedVersion) conflicts.push({reason:'plan_changed'});
   if(revision) for(const block of revision.beforeBlocks) { const task=(state.tasks||[]).find(t=>t.id===block.taskId); if(!task || ['completed','cancelled'].includes(task.status) || task.version!==revision.taskVersions[block.taskId]) conflicts.push({taskId:block.taskId,reason:'task_changed'}); }
+  if(revision) for(const task of state.tasks||[]) { const total=revision.beforeBlocks.filter(b=>b.taskId===task.id && Date.parse(b.end)>Date.parse(state.now)).reduce((n,b)=>n+(Date.parse(b.end)-Math.max(Date.parse(b.start),Date.parse(state.now)))/60000,0); if(total>task.remainingMinutes) conflicts.push({taskId:task.id,reason:'remaining_work_exceeded'}); }
   return {plan: conflicts.length ? state : {...state,blocks:structuredClone(revision.beforeBlocks),unscheduled:structuredClone(revision.beforeUnscheduled||[]),reasons:structuredClone(revision.beforeReasons||[])},conflicts};
 }
 module.exports={replan,undoRevision};
