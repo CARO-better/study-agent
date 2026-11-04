@@ -1,0 +1,18 @@
+{
+  "envId": "",
+  "appId": "",
+  "cloudRuntime": "Nodejs20.19",
+  "integrations": {
+    "cloudbase": { "status": "unconfigured" },
+    "ocr": { "status": "unconfigured", "region": "", "api": "GeneralAccurateOCR" },
+    "model": { "status": "unconfigured", "baseUrl": "", "model": "" },
+    "resourceSearch": { "status": "unconfigured", "provider": "bilibili-public-search" },
+    "wechat": {
+      "status": "unconfigured",
+      "templateId": "",
+      "fieldMapping": {},
+      "summaryTimes": ["08:00", "20:00"],
+      "timeZone": "Asia/Shanghai"
+    }
+  }
+}

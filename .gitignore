@@ -1,0 +1,8 @@
+node_modules/
+project.private.config.json
+.env
+.env.*
+!.env.example
+deployment/config.local.json
+deployment/cloudbaserc.local.json
+*.log

@@ -1,0 +1,13 @@
+{
+  "envId": "",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "api",
+      "runtime": "Nodejs20.19",
+      "handler": "index.main",
+      "timeout": 20,
+      "memorySize": 256
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "学期学习助理：导入后配置自己的小程序 AppID 和云环境",
+  "miniprogramRoot": "miniprogram/",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "compileType": "miniprogram",
+  "appid": "touristappid",
+  "projectname": "study-agent",
+  "setting": { "es6": true, "enhance": true, "minified": true, "urlCheck": true },
+  "packOptions": { "ignore": [], "include": [] },
+  "editorSetting": { "tabIndent": "insertSpaces", "tabSize": 2 }
+}

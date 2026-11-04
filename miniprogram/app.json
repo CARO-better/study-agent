@@ -1,0 +1,5 @@
+{
+  "pages": ["pages/today/index"],
+  "window": { "navigationBarTitleText": "学期学习助理" },
+  "sitemapLocation": "sitemap.json"
+}
