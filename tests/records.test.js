@@ -119,3 +119,48 @@ test('production bootstrap configures missing CloudBase documents as null instea
   const entry = api.createProductionHandler(cloud); assert.equal(configured, true);
   assert.deepEqual(await entry({ action: 'tasks.list' }), { ok: true, data: [] });
 });
+
+test('parent course change rejects incompatible children atomically and ordinary child edits remain valid', async () => {
+  const { call } = setup();
+  const semester = await success(call('semesters.create', { record: { name: '秋', startDate: '2026-09-01', endDate: '2027-01-20', teachingWeeks: 20 } }));
+  const a = await success(call('courses.create', { record: { name: 'A', semesterId: semester.id } }));
+  const b = await success(call('courses.create', { record: { name: 'B', semesterId: semester.id } }));
+  const parent = await success(call('tasks.create', { record: task({ courseId: a.id }) }));
+  const child = await success(call('tasks.create', { record: task({ courseId: a.id, parentTaskId: parent.id, status: 'completed' }) }));
+  for (const courseId of [b.id, null]) {
+    await error(call('tasks.update', { id: parent.id, expectedVersion: 1, patch: { courseId } }), 'INVALID_REFERENCE');
+    assert.deepEqual(await success(call('tasks.get', { id: parent.id })), parent);
+    assert.deepEqual(await success(call('tasks.get', { id: child.id })), child);
+  }
+  const edited = await success(call('tasks.update', { id: child.id, expectedVersion: 1, patch: { title: 'Child renamed' } }));
+  assert.equal(edited.version, 2); assert.equal(edited.status, 'completed'); assert.equal(edited.courseId, a.id);
+  const sameCourse = await success(call('tasks.update', { id: parent.id, expectedVersion: 1, patch: { courseId: a.id, title: 'Parent renamed' } }));
+  assert.equal(sameCourse.version, 2);
+  const standalone = await success(call('tasks.create', { record: task({ courseId: a.id }) }));
+  assert.equal((await success(call('tasks.update', { id: standalone.id, expectedVersion: 1, patch: { courseId: b.id } }))).courseId, b.id);
+});
+
+test('semester shrink rejects out-of-range course weeks atomically and ordinary course edits remain valid', async () => {
+  const { call } = setup();
+  const semester = await success(call('semesters.create', { record: { name: '秋', startDate: '2026-09-01', endDate: '2027-01-20', teachingWeeks: 20 } }));
+  const course = await success(call('courses.create', { record: { name: 'A', semesterId: semester.id, schedule: [{ weekday: 1, weeks: [10, 20], periods: [1, 2] }] } }));
+  await error(call('semesters.update', { id: semester.id, expectedVersion: 1, patch: { teachingWeeks: 10 } }), 'VALIDATION');
+  assert.deepEqual(await success(call('semesters.get', { id: semester.id })), semester);
+  assert.deepEqual(await success(call('courses.get', { id: course.id })), course);
+  const edited = await success(call('courses.update', { id: course.id, expectedVersion: 1, patch: { name: 'Renamed course' } }));
+  assert.equal(edited.version, 2); assert.deepEqual(edited.schedule[0].weeks, [10, 20]);
+  const shortened = await success(call('courses.update', { id: course.id, expectedVersion: 2, patch: { schedule: [{ weekday: 1, weeks: [10], periods: [1, 2] }] } }));
+  assert.equal(shortened.version, 3);
+  const safeShrink = await success(call('semesters.update', { id: semester.id, expectedVersion: 1, patch: { teachingWeeks: 10 } }));
+  assert.equal(safeShrink.version, 2); assert.equal(safeShrink.teachingWeeks, 10);
+});
+
+test('experiment tasks retain their type on create and update', async () => {
+  const { call } = setup();
+  const created = await success(call('tasks.create', { record: task({ type: 'experiment' }) }));
+  assert.equal(created.type, 'experiment');
+  const edited = await success(call('tasks.update', { id: created.id, expectedVersion: 1, patch: { title: '实验报告' } }));
+  assert.equal(edited.type, 'experiment');
+  const converted = await success(call('tasks.create', { record: task() }));
+  assert.equal((await success(call('tasks.update', { id: converted.id, expectedVersion: 1, patch: { type: 'experiment' } }))).type, 'experiment');
+});

@@ -26,7 +26,7 @@ function validate(collection, record) {
   } else if (collection === 'courses') {
     if (!text(record.name, 100) || !text(record.semesterId, 128) || !Array.isArray(record.schedule) || record.schedule.length > 100 || !record.schedule.every(schedule)) fail('VALIDATION');
   } else if (collection === 'tasks') {
-    if (!text(record.title, 300) || !['assignment', 'exam', 'group', 'study', 'other'].includes(record.type) || !['pending', 'in_progress', 'completed', 'cancelled'].includes(record.status) || !due(record.dueAt) || !Number.isInteger(record.remainingMinutes) || record.remainingMinutes < 0 || record.remainingMinutes > 100000) fail('VALIDATION');
+    if (!text(record.title, 300) || !['assignment', 'experiment', 'exam', 'group', 'study', 'other'].includes(record.type) || !['pending', 'in_progress', 'completed', 'cancelled'].includes(record.status) || !due(record.dueAt) || !Number.isInteger(record.remainingMinutes) || record.remainingMinutes < 0 || record.remainingMinutes > 100000) fail('VALIDATION');
     if (record.estimatedMinutes !== undefined && (!Number.isInteger(record.estimatedMinutes) || record.estimatedMinutes < 0 || record.estimatedMinutes > 100000)) fail('VALIDATION');
     if (record.examScope !== undefined && !(text(record.examScope, 5000) || (Array.isArray(record.examScope) && record.examScope.length <= 100 && record.examScope.every(v => text(v, 500))))) fail('VALIDATION');
     if (record.personalResponsibility !== undefined && !text(record.personalResponsibility, 5000)) fail('VALIDATION');
@@ -69,6 +69,14 @@ async function writeRecord(repository, owner, collection, input, previous, expec
     record.completedAt = record.status === 'completed' ? (previous?.completedAt || deps.now()) : null;
   }
   validate(collection, record); await references(repository, owner, collection, record);
+  if (previous && collection === 'tasks' && (previous.courseId || null) !== (record.courseId || null)) {
+    const children = await repository.list(owner, 'tasks', { parentTaskId: record.id });
+    if (children.some(child => (child.courseId || null) !== (record.courseId || null))) fail('INVALID_REFERENCE');
+  }
+  if (previous && collection === 'semesters' && record.teachingWeeks < previous.teachingWeeks) {
+    const courses = await repository.list(owner, 'courses', { semesterId: record.id });
+    if (courses.some(course => course.schedule.some(entry => entry.weeks.some(week => week > record.teachingWeeks)))) fail('VALIDATION');
+  }
   return repository.save(owner, collection, record, expectedVersion);
 }
 async function hasDependents(repository, owner, collection, id, deleting = new Set()) {

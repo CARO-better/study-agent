@@ -21,9 +21,9 @@ All saved records include `id,ownerOpenId,version,createdAt,updatedAt`; version 
 | profiles | required displayName; timezone defaults to Asia/Shanghai; optional studyGoal |
 | semesters | name,startDate,endDate (YYYY-MM-DD),teachingWeeks (1..60) |
 | courses | name,semesterId; optional teacher,notes; schedule defaults [] |
-| tasks | title,remainingMinutes; type assignment/exam/group/study/other (default assignment); status pending/in_progress/completed/cancelled (default pending); optional dueAt,courseId,parentTaskId,description,examScope,estimatedMinutes,personalResponsibility,schedule,priority(low/medium/high),fixed |
+| tasks | title,remainingMinutes; type assignment/experiment/exam/group/study/other (default assignment); status pending/in_progress/completed/cancelled (default pending); optional dueAt,courseId,parentTaskId,description,examScope,estimatedMinutes,personalResponsibility,schedule,priority(low/medium/high),fixed |
 
-Course schedule is `[{weekday:1..7,weeks:[1..60],periods:[1..24],location?}]`; task schedule uses one such object. Weeks must fit the linked semester for course schedules. `examScope` accepts a string or string array. Completed timestamps are server controlled. Parent chains cannot cycle, cross owners, or cross courses. Manually updating task status is allowed, including reopening; reminder logic must check current status. No planner/provider/reminder behavior is implemented here.
+Course schedule is `[{weekday:1..7,weeks:[1..60],periods:[1..24],location?}]`; task schedule uses one such object. Weeks must fit the linked semester for course schedules. Semester-week reductions that would invalidate an existing course schedule are rejected atomically. `examScope` accepts a string or string array. Completed timestamps are server controlled. Parent chains cannot cycle, cross owners, or cross courses; a parent course change incompatible with existing children is rejected atomically. Experiments use type `experiment`. Manually updating task status is allowed, including reopening; reminder logic must check current status. No planner/provider/reminder behavior is implemented here.
 
 ## Reviewed imports
 
