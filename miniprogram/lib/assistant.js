@@ -1,6 +1,7 @@
 'use strict';
 module.exports = function createAssistant() {
 const ai = require('./ai');
+const imageRequest = require('./image-request');
 const appearance = require('./appearance');
 const shell = require('./shell');
 const tools = require('./tools');
@@ -135,17 +136,16 @@ return {
       count: 1,
       mediaType: ['image'],
       sizeType: ['compressed'],
-      success: (result) => {
+      success: async (result) => {
         const file = result.tempFiles && result.tempFiles[0];
-        if (!file) return;
-        if(file.size>1500000){wx.showToast({title:'图片过大，请裁剪后重试',icon:'none'});return;}
-        const extension = (file.tempFilePath.split('.').pop() || 'jpg').toLowerCase();
-        wx.getFileSystemManager().readFile({
-          filePath: file.tempFilePath,
-          encoding: 'base64',
-          success: (read) => {if(read.data.length>2000000){wx.showToast({title:'图片过大，请裁剪后重试',icon:'none'});return;}this.setData({pendingImage:`data:image/${extension==='png'?'png':'jpeg'};base64,${read.data}`});},
-          fail: () => wx.showToast({ title: '读取图片失败', icon: 'none' })
-        });
+        if (!file || this.disposed) return;
+        wx.showLoading({title:'处理图片…',mask:true});
+        try {
+          const image=await imageRequest.prepare(file);
+          if(!this.disposed)this.setData({pendingImage:image});
+        } catch(error) {
+          if(!this.disposed)wx.showToast({title:error.message||'图片处理失败，请裁剪后重试',icon:'none'});
+        } finally {wx.hideLoading();}
       }
     });
   },
@@ -174,9 +174,12 @@ return {
       this.openSettings();
       return;
     }
+    const content = ai.buildUserContent({ text, image });
+    try {
+      imageRequest.check({action:'ai.chat',payload:{messages:[{role:'system',content:ai.systemPrompt({date:today(),courses:this.store.courses,tasks:this.store.tasks})},...ai.trimHistory([...this.history,{role:'user',content}])],tools:tools.TOOLS}});
+    } catch(error) {wx.showToast({title:error.message,icon:'none'});return;}
     const messages = [...this.data.messages, { role: 'user', text: text || '（图片）', image }];
     this.setData({ messages, input: '', pendingImage: '', sending: true, notice: '' });
-    const content = ai.buildUserContent({ text, image });
     this.history.push({ role: 'user', content });
     try {
       const result = await ai.runAgent({

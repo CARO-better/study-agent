@@ -62,6 +62,7 @@ async function call(action, payload = {}) {
   } catch (error) {
     const message = (error && (error.errMsg || error.message)) || '';
     // 云函数没部署时微信会抛 -501000 / FUNCTION_NOT_FOUND，单独给个可读的码。
+    if(/data exceed max size/i.test(message))throw new CloudError('PAYLOAD_TOO_LARGE','消息或图片过大，请裁剪图片后重试');
     const code = /FUNCTION_NOT_FOUND|-501000/.test(message) ? 'FUNCTION_NOT_FOUND' : 'NETWORK';
     throw new CloudError(code, `${reasonFor(code)}（${message || '无详细信息'}）`);
   }

@@ -3,6 +3,7 @@
 // 网络只在 requestModel 里，请求函数可注入，方便用 node 测整个循环。
 
 const cloud = require('./cloud');
+const imageRequest = require('./image-request');
 
 const SETTINGS_KEY = 'study_ai_v1';
 const DEFAULT_URL = 'https://api.deepseek.com/chat/completions';
@@ -119,7 +120,9 @@ async function runAgent({ messages, request, execute, maxRounds = MAX_ROUNDS }) 
 async function requestModel({ settings, messages, tools }) {
   if (cloud.available()) {
     try {
-      const data = await cloud.call('ai.chat', { messages, tools });
+      const payload={messages,tools};
+      imageRequest.check({action:'ai.chat',payload});
+      const data = await cloud.call('ai.chat', payload);
       return { choices: [{ message: data.message }], model: data.model, usage: data.usage };
     } catch (error) {
       const cloudSide = ['PROVIDER_UNCONFIGURED', 'MASTER_KEY_MISSING'];

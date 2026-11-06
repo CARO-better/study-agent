@@ -53,3 +53,10 @@ test('the compatibility AI screen has a working close action when opened as the 
   global.wx.navigateBack=()=>calls.push('back');global.wx.reLaunch=options=>calls.push(options.url);
   h.instance.back();assert.deepEqual(calls,['/pages/today/index']);
 });
+
+test('oversized complete image requests keep the attachment and input without calling the cloud',async()=>{
+ let called=false;const h=panel(async()=>{called=true;throw Error('must not send');});
+ const p=h.instance;p.store=h.storage.study_trial_v1;p.history=[];p.data.hasKey=true;p.data.input='保留';p.data.pendingImage='data:image/jpeg;base64,'+'A'.repeat(100000);
+ const image=p.data.pendingImage;await p.send();
+ assert.equal(called,false);assert.equal(p.data.pendingImage,image);assert.equal(p.data.input,'保留');assert.equal(p.data.sending,false);
+});
