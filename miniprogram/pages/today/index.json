@@ -1,1 +1,7 @@
-{ "navigationBarTitleText": "今日学习" }
+{
+  "navigationBarTitleText": "学程",
+  "usingComponents": {
+    "assistant-panel": "/components/assistant-panel/index"
+  },
+  "navigationStyle": "custom"
+}

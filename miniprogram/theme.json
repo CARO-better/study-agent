@@ -1,0 +1,12 @@
+{
+  "light": {
+    "background": "#F2F2F7",
+    "navigationText": "black",
+    "backgroundText": "dark"
+  },
+  "dark": {
+    "background": "#000000",
+    "navigationText": "white",
+    "backgroundText": "light"
+  }
+}

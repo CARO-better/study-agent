@@ -1,0 +1,1 @@
+<view class="motion" aria-hidden="true"><view class="fallback {{ready ? 'concealed' : ''}}"><view class="paper"><view class="line"></view><view class="line short"></view><view class="tick">✓</view></view></view><canvas class="canvas {{ready ? '' : 'concealed'}}" id="studyCanvas" type="2d" /></view>

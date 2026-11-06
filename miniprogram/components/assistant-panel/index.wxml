@@ -1,0 +1,6 @@
+<view class="appearance assistant-appearance theme-{{theme}} {{motionEnabled ? '' : 'reduce-motion'}}">
+  <view class="assistant-veil" bindtap="dismiss"></view>
+  <view class="assistant-panel glass" style="top:{{top + 8}}px" catchtap="stop">
+    <include src="../../templates/assistant.wxml"/>
+  </view>
+</view>

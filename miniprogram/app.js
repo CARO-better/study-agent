@@ -1,4 +1,5 @@
 const { envId } = require('./config');
+const appearance = require('./lib/appearance');
 
 App({
   globalData: {
@@ -7,6 +8,7 @@ App({
     envId: ''
   },
   onLaunch() {
+    appearance.subscribe(value => { this.globalData.theme = value.theme; appearance.paint(value.theme); });
     if (!envId) {
       console.info('[study-agent] 未填写云环境 ID，当前为本地试用模式，数据只保存在本机。');
       return;

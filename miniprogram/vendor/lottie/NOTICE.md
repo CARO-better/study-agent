@@ -1,0 +1,1 @@
+lottie-miniprogram 1.0.12, MIT. Source: https://github.com/wechat-miniprogram/lottie-miniprogram . Distributed npm miniprogram_dist/index.js is unmodified. Lottie animation data in assets/study-motion.js was authored for this project.

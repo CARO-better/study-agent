@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "towxml": "/towxml/towxml",
+    "study-motion": "/components/study-motion/index"
+  }
+}

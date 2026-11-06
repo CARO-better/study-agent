@@ -1,0 +1,6 @@
+@import '../../styles/assistant.wxss';
+:host { position: fixed; inset: 0; z-index: 60; }
+.assistant-appearance { min-height: 0; height: 100%; background: transparent; }
+.assistant-veil { position: absolute; inset: 0; background: rgba(0,0,0,.18); }
+.assistant-panel { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 32px; overflow: hidden; animation: panel-in .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes panel-in { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }

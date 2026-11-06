@@ -1,38 +1,4 @@
-<view class="chat">
-  <view class="chat-head"><text class="chat-title">AI 助理</text><text class="link" bindtap="openSettings">设置</text></view>
-  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
-  <view wx:if="{{!hasKey}}" class="notice">尚未配置模型。点右上角「设置」填写服务地址、模型名和 Key；云端配置成功后会移除本机明文 Key。</view>
-  <view class="thread">
-    <view wx:if="{{!messages.length}}" class="empty">可以直接说「明天交高数作业，预计一小时」，也可以发一张课表或作业截图，我会整理成待办。</view>
-    <view wx:for="{{messages}}" wx:key="index" class="msg {{item.role}}">
-      <view wx:if="{{item.image}}" class="thumb"><image src="{{item.image}}" mode="widthFix"/></view>
-      <view wx:if="{{item.role === 'assistant' && item.nodes}}" class="rich"><towxml nodes="{{item.nodes}}"/></view>
-      <view wx:elif="{{item.text}}" class="bubble">{{item.text}}</view>
-    </view>
-    <view wx:if="{{sending}}" class="msg assistant"><view class="bubble thinking">正在处理…</view></view>
-  </view>
-  <view class="composer">
-    <view wx:if="{{pendingImage}}" class="preview"><image src="{{pendingImage}}" mode="aspectFill"/><text class="remove" bindtap="clearImage">×</text></view>
-    <view class="composer-row">
-      <button class="icon" bindtap="chooseImage">图片</button>
-      <input class="chat-input" placeholder="说点什么，或发截图" value="{{input}}" bindinput="input" confirm-type="send" bindconfirm="send"/>
-      <button class="send" bindtap="send" disabled="{{sending}}">发送</button>
-    </view>
-  </view>
+<view class="appearance theme-{{theme}} {{motionEnabled ? '' : 'reduce-motion'}}">
+  <button class="ai-orb glass icon-button" style="top:{{shell.orbTop}}px" bindtap="back" aria-label="关闭 AI 助手"><image src="/assets/icons/x-{{theme}}.svg"/></button>
+  <view class="standalone-assistant" style="top:{{shell.navBottom + 8}}px"><include src="../../templates/assistant.wxml"/></view>
 </view>
-
-<view wx:if="{{showSettings}}" class="overlay"><view class="sheet">
-  <view class="sheet-head"><view class="section-title">模型设置</view><text class="link" bindtap="closeSettings">关闭</text></view>
-  <view class="sub">Key 通过云函数加密保存在你的云环境，本机仅保留服务地址与模型名。保存失败会保留原配置。</view>
-  <view class="label">常用服务</view>
-  <view class="chips"><view wx:for="{{presets}}" wx:key="id" class="chip {{activePreset === item.id ? 'chip-on' : ''}}" data-id="{{item.id}}" bindtap="usePreset">{{item.name}}</view><view class="chip {{activePreset === 'custom' ? 'chip-on' : ''}}" data-id="custom" bindtap="usePreset">自定义</view></view>
-  <view wx:if="{{visionHint}}" class="hint">{{visionHint}}</view>
-  <view class="label">服务地址</view>
-  <input class="input" value="{{settings.url}}" data-field="url" bindinput="field"/>
-  <view class="label">模型名</view>
-  <input class="input" value="{{settings.model}}" data-field="model" bindinput="field"/>
-  <view class="label">API Key</view>
-  <input class="input" password value="{{settings.apiKey}}" data-field="apiKey" bindinput="field"/>
-  <button class="primary submit" bindtap="saveSettings">保存</button>
-  <view class="sub">已配置云环境时由云函数请求模型，无需给每个模型域名配置小程序 request 白名单。更换服务或模型时请重新填写 Key。</view>
-</view></view>

@@ -1,0 +1,40 @@
+<view class="assistant-layout">
+  <view class="assistant-head">
+    <view class="assistant-name">AI</view>
+    <button class="icon-button" bindtap="openSettings" aria-label="模型设置"><image src="/assets/icons/settings-2-{{theme}}.svg"/></button>
+  </view>
+  <view wx:if="{{notice}}" class="assistant-notice">{{notice}}</view>
+  <view wx:if="{{!hasKey}}" class="assistant-notice actionable" bindtap="openSettings">设置模型<image src="/assets/icons/chevron-right-{{theme}}.svg"/></view>
+  <scroll-view scroll-y class="assistant-thread" scroll-with-animation="{{motionEnabled}}" scroll-into-view="{{sending ? 'assistant-end' : ''}}">
+    <view wx:if="{{!messages.length}}" class="assistant-welcome"><study-motion wx:if="{{motionEnabled}}" id="welcome-motion" enabled="{{motionEnabled}}"/><image wx:else class="welcome-symbol" src="/assets/icons/sparkles-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></view>
+    <view wx:for="{{messages}}" wx:key="index" class="message {{item.role}}">
+      <view wx:if="{{item.image}}" class="message-image"><image src="{{item.image}}" mode="widthFix"/></view>
+      <view wx:if="{{item.role === 'assistant' && item.nodes}}" class="rich"><towxml nodes="{{item.nodes}}"/></view>
+      <view wx:elif="{{item.text}}" class="bubble">{{item.text}}</view>
+    </view>
+    <view wx:if="{{sending}}" class="thinking" aria-label="AI 正在回复"><view></view><view></view><view></view></view>
+    <view id="assistant-end" class="thread-end"></view>
+  </scroll-view>
+  <view class="assistant-composer">
+    <view wx:if="{{pendingImage}}" class="image-preview"><image src="{{pendingImage}}" mode="aspectFill"/><button class="preview-remove icon-button" bindtap="clearImage" aria-label="移除图片"><image src="/assets/icons/x-{{theme}}.svg"/></button></view>
+    <view class="composer-row">
+      <button class="icon-button" bindtap="chooseImage" aria-label="添加图片"><image src="/assets/icons/image-plus-{{theme}}.svg"/></button>
+      <input class="chat-input" placeholder="问 AI…" placeholder-style="color:{{theme === 'dark' ? '#A0A0AA' : '#686873'}}" value="{{input}}" bindinput="input" confirm-type="send" bindconfirm="send" adjust-position cursor-spacing="20"/>
+      <button class="icon-button send-button" style="background:#0069D9" bindtap="send" disabled="{{sending || (!input && !pendingImage)}}" aria-label="发送"><image src="/assets/icons/arrow-up-dark.svg" style="width:22px;height:22px"/></button>
+    </view>
+  </view>
+</view>
+<view wx:if="{{showSettings}}" class="overlay model-overlay">
+  <view class="sheet glass model-sheet">
+    <view class="sheet-head editor-head">
+      <button class="icon-button" bindtap="closeSettings" aria-label="关闭模型设置"><image src="/assets/icons/x-{{theme}}.svg"/></button>
+      <view class="sheet-title">模型</view>
+      <button class="icon-button" bindtap="saveSettings" aria-label="保存模型设置"><image src="/assets/icons/check-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></button>
+    </view>
+    <view class="sheet-body">
+      <view class="preset-row"><view wx:for="{{presets}}" wx:key="id" class="preset {{activePreset === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="usePreset">{{item.name}}</view><view class="preset {{activePreset === 'custom' ? 'selected' : ''}}" data-id="custom" bindtap="usePreset">自定义</view></view>
+      <view class="field-group"><view class="label">地址</view><input class="input" value="{{settings.url}}" data-field="url" bindinput="field"/><view class="label">模型</view><input class="input" value="{{settings.model}}" data-field="model" bindinput="field"/><view class="label">API Key</view><input class="input" password value="{{settings.apiKey}}" data-field="apiKey" bindinput="field" placeholder="{{settings.cloudSaved ? '已保存，更换时填写' : '填写 Key'}}" placeholder-style="color:{{theme === 'dark' ? '#A0A0AA' : '#686873'}}"/></view>
+      <view class="model-help" bindtap="explainSettings">配置说明</view>
+    </view>
+  </view>
+</view>

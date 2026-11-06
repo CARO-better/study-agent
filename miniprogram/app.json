@@ -4,10 +4,13 @@
     "pages/ai/index"
   ],
   "window": {
-    "navigationBarTitleText": "学程 · 本地试用版",
-    "navigationBarBackgroundColor": "#F4F7FC",
-    "navigationBarTextStyle": "black",
-    "backgroundColor": "#F4F7FC"
+    "navigationBarTitleText": "学程",
+    "navigationBarBackgroundColor": "@background",
+    "navigationBarTextStyle": "@navigationText",
+    "backgroundColor": "@background",
+    "backgroundTextStyle": "@backgroundText"
   },
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "darkmode": true,
+  "themeLocation": "theme.json"
 }
