@@ -14,6 +14,7 @@ function buildBackup({ trial, ai, inbox }, exportedAt) {
     format: FORMAT,
     exportedAt: exportedAt || new Date().toISOString(),
     trial: {
+      ...source,
       courses: Array.isArray(source.courses) ? source.courses : [],
       tasks: Array.isArray(source.tasks) ? source.tasks : [],
       availability: Array.isArray(source.availability) ? source.availability : [],
@@ -24,7 +25,8 @@ function buildBackup({ trial, ai, inbox }, exportedAt) {
     ai: {
       url: String((ai && ai.url) || ''),
       model: String((ai && ai.model) || ''),
-      apiKey: String((ai && ai.apiKey) || '')
+      apiKey: '',
+      cloudSaved: Boolean(ai && ai.cloudSaved)
     },
     inbox: {
       messages: Array.isArray(inbox && inbox.messages) ? inbox.messages.slice(0, 30) : [],

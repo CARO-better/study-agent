@@ -13,7 +13,7 @@ const trial = {
   blocks: [], unscheduled: [], previous: null
 };
 
-test('a backup can be restored exactly after clearing local storage', () => {
+test('a backup restores study data without exporting a plaintext provider key', () => {
   const text = JSON.stringify(backup.buildBackup({
     trial,
     ai: { url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-flash', apiKey: 'sk-test' },
@@ -22,9 +22,9 @@ test('a backup can be restored exactly after clearing local storage', () => {
   const parsed = backup.parseBackup(text);
   assert.equal(parsed.trial.tasks.length, 2);
   assert.equal(parsed.trial.courses[0].name, '高等数学');
-  assert.equal(parsed.ai.apiKey, 'sk-test');
+  assert.equal(parsed.ai.apiKey, '');
   assert.equal(parsed.inbox.messages.length, 1);
-  assert.deepEqual(backup.counts(parsed), { courses: 1, tasks: 2, done: 1, availability: 1, hasKey: true });
+  assert.deepEqual(backup.counts(parsed), { courses: 1, tasks: 2, done: 1, availability: 1, hasKey: false });
 });
 
 test('broken or foreign payloads are rejected with a readable reason', () => {

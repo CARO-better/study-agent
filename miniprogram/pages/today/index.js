@@ -1,4 +1,4 @@
-const planner = require('../../lib/planner');
+const planning = require('../../lib/study-plan');
 const inbox = require('../../lib/inbox');
 const backupLib = require('../../lib/backup');
 const aiLib = require('../../lib/ai');
@@ -11,29 +11,30 @@ const BACKUP_META_KEY = 'study_backup_meta_v1';
 const types = ['作业','实验','考试','其他'];
 const priorities = ['低','中','高'];
 function localDate(d) { d = d || new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function stamp(date, time) { return new Date(date+'T'+time+':00').toISOString(); }
-function display(v) { const d=new Date(v); return localDate(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function stamp(date, time) { return new Date(date+'T'+time+':00+08:00').toISOString(); }
+function display(v) { return new Date(Date.parse(v)+8*3600000).toISOString().slice(0,16).replace('T',' '); }
 function fresh(){ return {courses:[],tasks:[],availability:[],blocks:[],unscheduled:[],previous:null}; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 Page({
  data:{tab:'今日',tabs:['今日','课程','计划','设置'],store:fresh(),types,priorities,courseNames:['未关联课程'],courseForm:{},taskForm:{},availabilityForm:{},editing:'',today:localDate(),typeIndex:0,priorityIndex:1,courseIndex:0,inboxMessages:[],unread:0,showInbox:false,backupAt:''},
- onLoad(){ let saved=wx.getStorageSync(KEY); const store=saved && saved.courses ? saved : fresh(); this.setData({store, backupAt:this.backupLabel()}); this.refresh(); this.refreshInbox(); this.syncOnLoad(store); },
+ onLoad(){const saved=wx.getStorageSync(KEY);this.setData({store:saved&&Array.isArray(saved.tasks)?{...fresh(),...saved}:fresh(),backupAt:this.backupLabel()});this.unsubscribe=sync.subscribe(value=>this.setData({syncStatus:value}));this.refresh();this.refreshInbox();this.syncOnLoad();},
  // 先用本地数据把界面渲染出来（不能等网络），再异步拉云端：云端更新就覆盖。
  // 清缓存后本地是空的，这一步会自动从云端恢复，不需要用户点任何按钮。
- syncOnLoad(local){ if(!cloud.available()) return; const isEmpty=!(local.courses&&local.courses.length)&&!(local.tasks&&local.tasks.length); sync.pull().then(remote=>{ if(sync.decide(remote.updatedAt,sync.localStamp(),isEmpty)!=='remote'||!remote.store) return; this.setData({store:remote.store}); wx.setStorageSync(KEY,remote.store); sync.markLocal(remote.updatedAt); this.refresh(); this.refreshInbox(); wx.showToast({title:isEmpty?'已从云端恢复数据':'已同步云端更新',icon:'none'}); }).catch(error=>console.warn('[sync] 拉取失败',error&&error.code,error&&error.message)); },
- onShow(){ const saved=wx.getStorageSync(KEY); if(saved && saved.courses){ this.setData({store:saved}); this.refresh(); this.refreshInbox(); } },
+ async syncOnLoad(){const result=await sync.reconcile();if(result.store)this.setData({store:{...fresh(),...result.store}});this.refresh();this.refreshInbox();if(result.restored)wx.showToast({title:'已恢复完整云端数据',icon:'none'});await sync.flush();},
+ onShow(){const saved=wx.getStorageSync(KEY);if(saved&&Array.isArray(saved.tasks)){this.setData({store:{...fresh(),...saved}});this.refresh();this.refreshInbox();}if(this.unsubscribe)sync.flush();},
  openAI(){ wx.navigateTo({url:'/pages/ai/index'}); },
  backupLabel(){const stamp=wx.getStorageSync(BACKUP_META_KEY); if(!stamp) return '从未备份'; return String(stamp).slice(0,16).replace('T',' ');},
- exportBackup(){const data=backupLib.buildBackup({trial:this.data.store,ai:aiLib.readSettings(wx.getStorageSync),inbox:wx.getStorageSync(INBOX_KEY)||null},new Date().toISOString()); wx.setClipboardData({data:JSON.stringify(data),success:()=>{wx.setStorageSync(BACKUP_META_KEY,new Date().toISOString()); this.setData({backupAt:this.backupLabel()}); wx.showModal({title:'已复制到剪贴板',content:'把它粘贴到微信收藏或「文件传输助手」里保存。这段文本含你的 API Key，不要发给别人。',showCancel:false});}});},
- importBackup(){wx.getClipboardData({success:res=>{let parsed; try{parsed=backupLib.parseBackup(res.data);}catch(error){wx.showModal({title:'无法恢复',content:error.message,showCancel:false});return;} wx.showModal({title:'恢复这份备份？',content:backupLib.describe(parsed)+'\n\n会覆盖当前本机的任务和设置。',success:r=>{if(!r.confirm)return; this.setData({store:parsed.trial}); wx.setStorageSync(KEY,parsed.trial); if(parsed.ai) wx.setStorageSync('study_ai_v1',parsed.ai); if(parsed.inbox) wx.setStorageSync(INBOX_KEY,parsed.inbox); this.refresh(); this.refreshInbox(); wx.showToast({title:'已恢复',icon:'success'});}});}});},
- save(){wx.setStorageSync(KEY,this.data.store); this.refresh(); this.refreshInbox(); sync.schedule(this.data.store);},
+ exportBackup(){const data=backupLib.buildBackup({trial:this.data.store,ai:aiLib.readSettings(k=>wx.getStorageSync(k)),inbox:wx.getStorageSync(INBOX_KEY)||null});wx.setClipboardData({data:JSON.stringify(data),success:()=>{wx.setStorageSync(BACKUP_META_KEY,new Date().toISOString());this.setData({backupAt:this.backupLabel()});wx.showModal({title:'已复制学习数据备份',content:'备份不包含 API Key；模型配置继续由云端保管。请保存到你自己的文件中。',showCancel:false});}});},
+ importBackup(){wx.getClipboardData({success:async res=>{let parsed;try{parsed=backupLib.parseBackup(res.data);}catch(error){wx.showModal({title:'无法恢复',content:error.message,showCancel:false});return;}const choice=await this.ask({title:'恢复这份备份？',content:backupLib.describe(parsed)+'\n会覆盖学习数据并保留本机恢复副本；不会导入旧备份里的明文 Key。'});if(!choice.confirm)return;sync.recover(this.data.store,'before-backup-import');this.setData({store:parsed.trial});this.save(false);if(parsed.inbox)wx.setStorageSync(INBOX_KEY,parsed.inbox);this.refreshInbox();}});},
+ save(replan=true){let store=this.data.store;if(replan)store=planning.autoReplan(store,new Date().toISOString());sync.save(store);this.setData({store});this.refresh();this.refreshInbox();},
  // 切后台或关页面时，把还没发出去的改动立刻推上去。
- onHide(){ sync.flush(); },
+ onHide(){sync.flush();},
+ onUnload(){if(this.unsubscribe)this.unsubscribe();sync.flush();},
  // 诊断用：只读一次 tasks.list，确认云函数部署、集合创建、身份归属三件事都通了。
  // 不改任何数据，失败时给出可执行的下一步。
  probeCloud(){ cloud.probe().then(r=>{ wx.showModal({title:r.ok?'云端已连通':'云端未连通',content:r.message+(r.hint?'\n\n下一步：'+r.hint:''),showCancel:false}); }); },
  // 只读预览：把本地数据转成云端结构，报数量和问题，**不上传任何东西**。
- previewMigrate(){ const plan=migrate.buildPlan(this.data.store); if(plan.problems.length) console.warn('[migrate] 必须先解决的问题：',plan.problems); if(plan.notes.length) console.info('[migrate] 提示：',plan.notes); wx.showModal({title:'上云预览（未上传）',content:migrate.describePlan(plan),showCancel:false}); },
+ previewMigrate(){const s=this.data.store;wx.showModal({title:'完整快照预览（未上传）',content:'课程 '+s.courses.length+' 门，任务 '+s.tasks.length+' 条，可用时段 '+s.availability.length+' 个，安排 '+s.blocks.length+' 块。包含撤销记录，不含模型 Key。',showCancel:false});},
  ask(opts){ return new Promise(resolve=>wx.showModal({...opts,success:resolve,fail:()=>resolve({confirm:false})})); },
  // 逐个学期确认日期：默认用推断值，用户可以改成「开始,结束,周数」。
  async confirmTerms(plan){
@@ -55,64 +56,62 @@ Page({
    return true;
  },
  async uploadToCloud(){
-   const plan=migrate.buildPlan(this.data.store);
-   const s=plan.summary;
-   if(!s.semesters&&!s.courses&&!s.tasks){ wx.showModal({title:'没有可上传的数据',content:'本地还没有课程或任务，先在「课程」和「今日」里添加。',showCancel:false}); return; }
-   if(plan.problems.length){ wx.showModal({title:'先解决这些问题（'+plan.problems.length+'）',content:plan.problems.slice(0,4).join('\n\n'),showCancel:false}); return; }
-   if(!(await this.confirmTerms(plan))) return;
-   const go=await this.ask({title:'确认上传',content:'学期 '+s.semesters+' 个、课程 '+s.courses+' 门、任务 '+s.tasks+' 条。\n\n本地数据会原样保留，云端存的是副本。继续？',confirmText:'上传'});
-   if(!go.confirm) return;
-   wx.showLoading({title:'上传中…',mask:true});
-   try{
-     const report=await migrate.upload(plan,{call:cloud.call,onProgress:({done,total})=>wx.showLoading({title:'上传中 '+Math.round(done/Math.max(total,1)*100)+'%',mask:true})});
-     wx.hideLoading();
-     const lines=['成功：学期 '+report.semesters+'、课程 '+report.courses+'、任务 '+report.tasks];
-     if(report.errors.length) lines.push('','有 '+report.errors.length+' 条失败：',...report.errors.slice(0,3));
-     console.warn('[migrate] 完整报告：',report);
-     wx.setStorageSync('study_cloud_migrated_at',report.uploadedAt);
-     wx.showModal({title:report.errors.length?'部分完成':'上传完成',content:lines.join('\n'),showCancel:false});
-   }catch(error){
-     wx.hideLoading();
-     wx.showModal({title:'上传中断',content:(error&&error.message)||String(error)+'\n\n已上传的部分会留在云端，可以重试；本地数据没动。',showCancel:false});
-   }
+   if(sync.status().state==='conflict'){
+     if(!(await this.ask({title:'保留本机并覆盖云端？',content:'另一设备可能有更新。云端原快照会先保留恢复副本，再用当前完整数据覆盖。',confirmText:'保留本机'})).confirm)return;
+     await sync.overwriteRemote();
+   }else{sync.save(this.data.store);await sync.flush();}
+   wx.showModal({title:'同步结果',content:sync.status().label,showCancel:false});
  },
- // 清缓存或换手机后，把云端数据拉回本地。注意排期结果不在云端，恢复后要重新生成。
  async restoreFromCloud(){
-   const ok=await this.ask({title:'从云端恢复',content:'云端数据会覆盖本机的课程和任务。\n\n排期结果不在云端，恢复后需要重新生成。继续？',confirmText:'覆盖本机'});
-   if(!ok.confirm) return;
-   wx.showLoading({title:'读取云端…',mask:true});
-   try{
-     const data=await migrate.restore({call:cloud.call});
-     const store={courses:data.courses,tasks:data.tasks,availability:[],blocks:[],unscheduled:[],previous:null};
-     this.setData({store});
-     wx.setStorageSync(KEY,store);
-     wx.hideLoading();
-     this.refresh(); this.refreshInbox();
-     wx.showModal({title:'已恢复',content:'课程 '+data.courses.length+' 门、任务 '+data.tasks.length+' 条。\n\n排期需要重新生成。AI 的 API Key 不在云端，要去设置里重填。',showCancel:false});
-   }catch(error){
-     wx.hideLoading();
-     wx.showModal({title:'恢复失败',content:(error&&error.message)||String(error),showCancel:false});
-   }
+   if(!(await this.ask({title:'恢复完整云端快照？',content:'会覆盖课程、任务、可用时间与完整排期。当前数据会先保留恢复副本。云端模型 Key 不受影响。',confirmText:'恢复云端'})).confirm)return;
+   try{const result=await sync.restoreRemote();this.setData({store:result.store});this.refresh();this.refreshInbox();wx.showToast({title:'完整学习数据已恢复',icon:'none'});}catch(error){wx.showModal({title:'恢复失败',content:error.message,showCancel:false});}
  },
- refresh(){const s=this.data.store; const names=['未关联课程'].concat(s.courses.map(c=>c.semester+' · '+c.name)); const courseName=id=>{const c=s.courses.find(x=>x.id===id);return c?c.name:'未关联课程'}; const tasks=s.tasks.map(t=>Object.assign({},t,{courseName:courseName(t.courseId),typeLabel:types[t.typeIndex]||'作业',priorityLabel:priorities[t.priorityIndex]||'中'})); const blocks=s.blocks.map(b=>{const t=s.tasks.find(x=>x.id===b.taskId); return Object.assign({},b,{title:t?t.title:'已删除任务',timeLabel:display(b.start)+' - '+display(b.end).slice(11)});}); const reasons={overdue:'已过截止时间',no_availability:'没有可用时段',below_minimum:'剩余时间不足 30 分钟',insufficient_time:'可用时间不足'}; const unscheduled=(s.unscheduled||[]).map(u=>{const t=s.tasks.find(x=>x.id===u.taskId);return Object.assign({},u,{title:t?t.title:'任务',reasonLabel:reasons[u.reason]||u.reason});}); this.setData({courseNames:names,tasks,blocks,unscheduled,availability:s.availability});},
+ async restoreRecovery(){
+   const copies=wx.getStorageSync(sync.RECOVERY_KEY)||[];
+   if(!copies.length){wx.showToast({title:'暂无恢复副本',icon:'none'});return;}
+   if(!(await this.ask({title:'恢复覆盖前的副本？',content:'将恢复最近一次覆盖前的数据；遇到云端冲突会等待你选择。'})).confirm)return;
+   const old=this.data.store;this.setData({store:copies[0].store});sync.recover(old,'before-local-recovery');this.save(false);
+ },
+ refresh(){const s=this.data.store; const names=['未关联课程'].concat(s.courses.map(c=>c.semester+' · '+c.name)); const courseName=id=>{const c=s.courses.find(x=>x.id===id);return c?c.name:'未关联课程'}; const tasks=s.tasks.map(t=>Object.assign({},t,{courseName:courseName(t.courseId),typeLabel:types[t.typeIndex==null?['homework','experiment','exam','other'].indexOf(t.type):t.typeIndex]||'作业',priorityLabel:priorities[t.priorityIndex==null?['low','medium','high'].indexOf(t.priority):t.priorityIndex]||'中'})); const blocks=s.blocks.map(b=>{const t=s.tasks.find(x=>x.id===b.taskId); return Object.assign({},b,{title:t?t.title:'已删除任务',timeLabel:display(b.start)+' - '+display(b.end).slice(11)});}); const reasons={overdue:'已过截止时间',no_availability:'没有可用时段',below_minimum:'剩余时间不足 30 分钟',insufficient_time:'可用时间不足'}; const unscheduled=(s.unscheduled||[]).map(u=>{const t=s.tasks.find(x=>x.id===u.taskId);return Object.assign({},u,{title:t?t.title:'任务',reasonLabel:reasons[u.reason]||u.reason});}); this.setData({courseNames:names,tasks,blocks,unscheduled,availability:s.availability,fixedBlocks:s.fixedBlocks||[],planMessage:s.planMessage||''});},
  switchTab(e){this.setData({tab:e.currentTarget.dataset.tab,editing:''});},
  refreshInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const base=saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(); const next=inbox.upsertDigest(base,inbox.buildDigest(this.data.store.tasks,{date:today,now:new Date().toISOString()})); wx.setStorageSync(INBOX_KEY,next); this.setData({today,inboxMessages:next.messages.map(m=>({date:m.date,summary:inbox.summaryText(m),items:m.items})),unread:inbox.unreadBadge(next,today)});},
  openInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const next=inbox.markRead(saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(),today); wx.setStorageSync(INBOX_KEY,next); this.setData({showInbox:true,unread:0});},
  closeInbox(){this.setData({showInbox:false});},
- toggleFromInbox(e){const id=e.currentTarget.dataset.id; let s=this.data.store,t=s.tasks.find(x=>x.id===id); if(!t)return; t.status=t.status==='completed'?'open':'completed'; this.setData({store:s}); this.save();},
- openCourse(e){const id=e.currentTarget.dataset.id; const item=this.data.store.courses.find(c=>c.id===id);this.setData({editing:'course',courseForm:item?Object.assign({},item):{name:'',semester:''}});},
- openTask(e){const id=e.currentTarget.dataset.id; const item=this.data.store.tasks.find(t=>t.id===id);const f=item?Object.assign({},item):{title:'',courseId:'',typeIndex:0,priorityIndex:1,dueAt:localDate(),remainingMinutes:60}; let ci=this.data.store.courses.findIndex(c=>c.id===f.courseId)+1;this.setData({editing:'task',taskForm:f,typeIndex:f.typeIndex||0,priorityIndex:f.priorityIndex==null?1:f.priorityIndex,courseIndex:ci});},
+ toggleFromInbox(e){const id=e.currentTarget.dataset.id; let s=this.data.store,t=s.tasks.find(x=>x.id===id); if(!t)return; t.status=t.status==='completed'?'open':'completed';t.version=(t.version||0)+1; this.setData({store:s}); this.save();},
+ openCourse(e){const id=e.currentTarget.dataset.id; const item=this.data.store.courses.find(c=>c.id===id);this.setData({editing:'course',courseForm:item?Object.assign({},item,{importanceIndex:Math.max(0,['low','medium','high'].indexOf(item.importance||'medium')),masteryIndex:Math.max(0,['low','medium','high'].indexOf(item.mastery||'medium'))}):{name:'',semester:'',importance:'medium',mastery:'medium',importanceIndex:1,masteryIndex:1}});},
+ openTask(e){const id=e.currentTarget.dataset.id; const item=this.data.store.tasks.find(t=>t.id===id);const f=item?Object.assign({},item):{title:'',courseId:'',typeIndex:0,priorityIndex:1,dueAt:'',remainingMinutes:60,examScope:''}; let ci=this.data.store.courses.findIndex(c=>c.id===f.courseId)+1;this.setData({editing:'task',taskForm:f,typeIndex:f.typeIndex||0,priorityIndex:f.priorityIndex==null?1:f.priorityIndex,courseIndex:ci});},
  openAvailability(){this.setData({editing:'availability',availabilityForm:{date:localDate(),start:'19:00',end:'21:00'}});},
  close(){this.setData({editing:''});},
  field(e){let obj=this.data.editing==='course'?'courseForm':this.data.editing==='task'?'taskForm':'availabilityForm'; this.setData({[obj+'.'+e.currentTarget.dataset.field]:e.detail.value});},
  chooseType(e){this.setData({typeIndex:Number(e.detail.value)});},choosePriority(e){this.setData({priorityIndex:Number(e.detail.value)});},chooseCourse(e){this.setData({courseIndex:Number(e.detail.value)});},
- saveCourse(){let f=this.data.courseForm;if(!f.name.trim()||!f.semester.trim()){wx.showToast({title:'请填写学期和课程',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();let i=s.courses.findIndex(x=>x.id===f.id); if(i<0)s.courses.push(f);else s.courses[i]=f;this.setData({store:s,editing:''});this.save();},
- saveTask(){let f=this.data.taskForm;let minutes=Number(f.remainingMinutes);if(!f.title.trim()||!f.dueAt||!Number.isInteger(minutes)||minutes<1||minutes>10000){wx.showToast({title:'请填写标题、日期和有效分钟数',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.remainingMinutes=minutes;f.typeIndex=this.data.typeIndex;f.priorityIndex=this.data.priorityIndex;f.courseId=this.data.courseIndex?s.courses[this.data.courseIndex-1].id:'';f.type=['homework','experiment','exam','other'][f.typeIndex];f.priority=['low','medium','high'][f.priorityIndex];f.status=f.status||'open';f.version=(f.version||0)+1;let i=s.tasks.findIndex(x=>x.id===f.id);if(i<0)s.tasks.push(f);else s.tasks[i]=f;this.setData({store:s,editing:''});this.save();},
- saveAvailability(){const f=this.data.availabilityForm;if(!f.date||!f.start||!f.end||f.start>=f.end){wx.showToast({title:'结束时间须晚于开始时间',icon:'none'});return;}let s=this.data.store;s.availability.push({id:uid(),date:f.date,startTime:f.start,endTime:f.end,start:stamp(f.date,f.start),end:stamp(f.date,f.end)});this.setData({store:s,editing:''});this.save();},
- toggleTask(e){let s=this.data.store,t=s.tasks.find(x=>x.id===e.currentTarget.dataset.id);if(t){t.status=t.status==='completed'?'open':'completed';this.setData({store:s});this.save();}},
- remove(e){const kind=e.currentTarget.dataset.kind,id=e.currentTarget.dataset.id;wx.showModal({title:'确认删除？',content:kind==='course'?'关联任务会保留，但不再关联课程。':'删除后无法恢复。',success:r=>{if(!r.confirm)return;let s=this.data.store;if(kind==='task'){s.tasks=s.tasks.filter(x=>x.id!==id);s.blocks=s.blocks.filter(x=>x.taskId!==id);s.unscheduled=s.unscheduled.filter(x=>x.taskId!==id);}if(kind==='course'){s.courses=s.courses.filter(x=>x.id!==id);s.tasks.forEach(t=>{if(t.courseId===id)t.courseId='';});}if(kind==='availability')s.availability=s.availability.filter(x=>x.id!==id);this.setData({store:s});this.save();}});},
- generate(){let s=this.data.store;let locked=s.blocks.filter(b=>b.locked && s.tasks.some(t=>t.id===b.taskId && t.status!=='completed'));let tasks=s.tasks.map(t=>{let used=locked.filter(b=>b.taskId===t.id).reduce((n,b)=>n+(Date.parse(b.end)-Date.parse(b.start))/60000,0);return Object.assign({},t,{remainingMinutes:Math.max(0,t.remainingMinutes-used)});});s.previous={blocks:JSON.parse(JSON.stringify(s.blocks)),unscheduled:JSON.parse(JSON.stringify(s.unscheduled))};let plan=planner.buildPlan({tasks,availability:s.availability,fixedBlocks:locked,now:new Date().toISOString(),horizonDays:90});s.blocks=locked.concat(plan.blocks).sort((a,b)=>Date.parse(a.start)-Date.parse(b.start));s.unscheduled=plan.unscheduled;this.setData({store:s});this.save();wx.showToast({title:'计划已生成',icon:'success'});},
- lock(e){let s=this.data.store,b=s.blocks[Number(e.currentTarget.dataset.index)];if(b)b.locked=!b.locked;this.setData({store:s});this.save();},
- undo(){let s=this.data.store;if(!s.previous){wx.showToast({title:'没有可撤销的计划',icon:'none'});return;}s.blocks=s.previous.blocks;s.unscheduled=s.previous.unscheduled;s.previous=null;this.setData({store:s});this.save();},
+ saveCourse(){let f=this.data.courseForm;if(!f.name.trim()||!f.semester.trim()){wx.showToast({title:'请填写学期和课程',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.importance=['low','medium','high'][Number(f.importanceIndex)];f.mastery=['low','medium','high'][Number(f.masteryIndex)];let i=s.courses.findIndex(x=>x.id===f.id); if(i<0)s.courses.push(f);else s.courses[i]=f;this.setData({store:s,editing:''});this.save();},
+ saveTask(){let f=this.data.taskForm;let minutes=Number(f.remainingMinutes);if(!f.title.trim()||!Number.isInteger(minutes)||minutes<0||minutes>10000){wx.showToast({title:'请填写标题、日期和有效分钟数',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.remainingMinutes=minutes;f.typeIndex=this.data.typeIndex;f.priorityIndex=this.data.priorityIndex;f.courseId=this.data.courseIndex?s.courses[this.data.courseIndex-1].id:'';f.type=['homework','experiment','exam','other'][f.typeIndex];f.priority=['low','medium','high'][f.priorityIndex];f.status=f.status||'open';f.version=(f.version||0)+1;let i=s.tasks.findIndex(x=>x.id===f.id);if(i<0)s.tasks.push(f);else s.tasks[i]=f;this.setData({store:s,editing:''});this.save();},
+ saveAvailability(){
+   const f=this.data.availabilityForm,weeks=Number(f.repeatWeeks||1);
+   if(!f.date||!f.start||!f.end||f.start>=f.end||!Number.isInteger(weeks)||weeks<1||weeks>30){wx.showToast({title:'请填写有效时间和重复周数（1—30）',icon:'none'});return;}
+   const store=JSON.parse(JSON.stringify(this.data.store));
+   for(let week=0;week<weeks;week++){
+     const day=new Date(Date.parse(f.date+'T00:00:00+08:00')+week*7*86400000+8*3600000).toISOString().slice(0,10);
+     const interval={id:uid(),date:day,startTime:f.start,endTime:f.end,start:stamp(day,f.start),end:stamp(day,f.end),title:String(f.title||'固定课程/占用时间')};
+     if(f.fixed){store.fixedBlocks=store.fixedBlocks||[];store.fixedBlocks.push(interval);}else store.availability.push(interval);
+   }
+   this.setData({store,editing:''});this.save();
+ },
+ openFixedTime(){this.setData({editing:'availability',availabilityForm:{date:localDate(),start:'08:00',end:'10:00',fixed:true,repeatWeeks:1,title:''}});},
+ toggleTask(e){let s=this.data.store,t=s.tasks.find(x=>x.id===e.currentTarget.dataset.id);if(t){t.status=t.status==='completed'?'open':'completed';t.version=(t.version||0)+1;this.setData({store:s});this.save();}},
+ remove(e){const kind=e.currentTarget.dataset.kind,id=e.currentTarget.dataset.id;wx.showModal({title:'确认删除？',content:kind==='course'?'关联任务会保留，但不再关联课程。':'删除后无法恢复。',success:r=>{if(!r.confirm)return;let s=this.data.store;if(kind==='task'){s.tasks=s.tasks.filter(x=>x.id!==id);s.blocks=s.blocks.filter(x=>x.taskId!==id);s.unscheduled=s.unscheduled.filter(x=>x.taskId!==id);}if(kind==='course'){s.courses=s.courses.filter(x=>x.id!==id);s.tasks.forEach(t=>{if(t.courseId===id)t.courseId='';});}if(kind==='availability')s.availability=s.availability.filter(x=>x.id!==id);if(kind==='fixed')s.fixedBlocks=(s.fixedBlocks||[]).filter(x=>x.id!==id);this.setData({store:s});this.save();}});},
+ async generate(){if(this.data.planBusy)return;this.setData({planBusy:true});try{let store;if(cloud.available()){sync.save(this.data.store);store=await sync.generatePlan();}else store=planning.generate(this.data.store,new Date().toISOString());this.setData({store});if(!cloud.available())this.save(false);else{this.refresh();this.refreshInbox();}wx.showToast({title:store.planStatus==='needs_attention'?'请先处理固定安排冲突':'学习计划已生成',icon:'none'});}catch(error){wx.showModal({title:'暂时无法生成',content:error.message,showCancel:false});}finally{this.setData({planBusy:false});}},
+ lock(e){const s=JSON.parse(JSON.stringify(this.data.store)),b=s.blocks[Number(e.currentTarget.dataset.index)];if(b)b.locked=!b.locked;s.planVersion=(s.planVersion||0)+1;this.setData({store:s});this.save(false);},
+ undo(){const result=planning.undo(this.data.store,new Date().toISOString());if(!result.ok){wx.showModal({title:'无法撤销',content:result.reason,showCancel:false});return;}this.setData({store:result.store});this.save(false);},
+
+ clearDeadline(){this.setData({'taskForm.dueAt':''});},
+ async recommend(e){
+   if(this.data.resourceBusy)return;
+   const id=e&&e.currentTarget&&e.currentTarget.dataset.id;
+   this.setData({resourceBusy:true,showResources:true,resources:[],resourceNotice:'正在检索哔哩哔哩实际课程…'});
+   try{await sync.flush();if(sync.status().dirty)throw Error('请先完成同步，再获取对应任务的推荐');const result=await cloud.call('resources.recommendSnapshot',{taskIds:id?[id]:[],limitPerTask:4,maxTasks:3});this.setData({resources:result.results,resourceNotice:result.results.length?'来源：哔哩哔哩实时检索；点击复制原视频链接':result.note||'没有可推荐的未完成任务'});}catch(error){this.setData({resourceNotice:error.code==='BILI_UNAVAILABLE'?`${error.message||'哔哩哔哩暂时无法检索，请稍后重试'}；未生成替代链接`:error.message});}finally{this.setData({resourceBusy:false});}
+ },
+ copyResource(e){const url=e.currentTarget.dataset.url;if(/^https:\/\/www\.bilibili\.com\/video\/[A-Za-z0-9]+/.test(url))wx.setClipboardData({data:url});},
+ closeResources(){this.setData({showResources:false});},
  sample(){wx.showModal({title:'添加示例数据？',content:'会在当前数据中添加标注为示例的课程、任务和明日可用时间。',success:r=>{if(!r.confirm)return;let s=this.data.store;let d=new Date();d.setDate(d.getDate()+1);let date=localDate(d),id=uid();s.courses.push({id,name:'示例课程',semester:'示例学期'});s.tasks.push({id:uid(),title:'示例实验报告',courseId:id,typeIndex:1,priorityIndex:1,type:'experiment',priority:'medium',dueAt:date,remainingMinutes:60,status:'open',version:1});s.availability.push({id:uid(),date,startTime:'19:00',endTime:'21:00',start:stamp(date,'19:00'),end:stamp(date,'21:00')});this.setData({store:s});this.save();}});}
 });

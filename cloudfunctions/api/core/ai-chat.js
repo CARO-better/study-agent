@@ -15,6 +15,42 @@ const MAX_MESSAGES = 30;
 const MAX_TOTAL_CHARS = 60000;
 const MAX_TOKENS = 4096;
 const ALLOWED_ROLES = ['system', 'user', 'assistant', 'tool'];
+const MAX_IMAGE_CHARS = 2 * 1024 * 1024;
+
+function validateMessages(messages) {
+  if (!Array.isArray(messages) || !messages.length || messages.length > MAX_MESSAGES) fail('VALIDATION');
+  let textChars = 0, imageChars = 0;
+  const waiting = new Set();
+  for (const message of messages) {
+    if (!message || !ALLOWED_ROLES.includes(message.role)) fail('VALIDATION');
+    if (waiting.size && message.role !== 'tool') fail('VALIDATION');
+    if (Array.isArray(message.content)) {
+      if (message.role !== 'user' || !message.content.length || message.content.length > 6) fail('VALIDATION');
+      for (const part of message.content) {
+        if (part && part.type === 'text' && typeof part.text === 'string') textChars += part.text.length;
+        else if (part && part.type === 'image_url') {
+          const url = part.image_url && part.image_url.url;
+          if (typeof url !== 'string' || !/^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(url)) fail('VALIDATION');
+          imageChars += url.length;
+        } else fail('VALIDATION');
+      }
+    } else if (typeof message.content === 'string') textChars += message.content.length;
+    else if (!(message.role === 'assistant' && message.content == null && Array.isArray(message.tool_calls))) fail('VALIDATION');
+    if (message.role === 'tool') {
+      if (typeof message.tool_call_id !== 'string' || !waiting.delete(message.tool_call_id)) fail('VALIDATION');
+    } else if (message.tool_call_id !== undefined) fail('VALIDATION');
+    if (message.tool_calls !== undefined) {
+      if (message.role !== 'assistant' || !Array.isArray(message.tool_calls) || !message.tool_calls.length || message.tool_calls.length > 10) fail('VALIDATION');
+      for (const call of message.tool_calls) {
+        if (!call || typeof call.id !== 'string' || !call.id || call.id.length > 200 || waiting.has(call.id) || call.type !== 'function' || !call.function || !/^[A-Za-z0-9_-]{1,64}$/.test(call.function.name) || typeof call.function.arguments !== 'string' || call.function.arguments.length > 10000) fail('VALIDATION');
+        try { const args = JSON.parse(call.function.arguments); if (!args || typeof args !== 'object' || Array.isArray(args)) fail('VALIDATION'); } catch (_) { fail('VALIDATION'); }
+        waiting.add(call.id);
+      }
+    }
+    if (textChars > MAX_TOTAL_CHARS || imageChars > MAX_IMAGE_CHARS) fail('VALIDATION');
+  }
+  if (waiting.size) fail('VALIDATION');
+}
 
 // 限流按北京时间自然日算，和 providerUsage 里 model.js 的口径保持一致。
 function chinaDate(iso) {
@@ -25,14 +61,8 @@ async function handleAiChat({ owner, action, payload }, deps) {
   if (action !== 'ai.chat') fail('UNKNOWN_ACTION');
 
   const messages = payload && payload.messages;
-  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) fail('VALIDATION');
-  let chars = 0;
-  for (const message of messages) {
-    if (!message || !ALLOWED_ROLES.includes(message.role)) fail('VALIDATION');
-    if (message.content != null && typeof message.content !== 'string') fail('VALIDATION');
-    chars += (message.content || '').length;
-  }
-  if (chars > MAX_TOTAL_CHARS) fail('VALIDATION');
+  validateMessages(messages);
+  if (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.length > 16 || JSON.stringify(payload.tools).length > 60000)) fail('VALIDATION');
 
   const setting = await deps.repository.get(owner, 'providerSettings', 'default');
   if (!setting || !setting.keyEnvelope) fail('PROVIDER_UNCONFIGURED');
@@ -67,7 +97,9 @@ async function handleAiChat({ owner, action, payload }, deps) {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
       body: JSON.stringify(body),
-      maxBytes: 2 * 1024 * 1024
+      maxBytes: 2 * 1024 * 1024,
+      maxRequestBytes: 3 * 1024 * 1024,
+      timeout: 25000
     });
   } catch (error) {
     fail('MODEL_FAILED');

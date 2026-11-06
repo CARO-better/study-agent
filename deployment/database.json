@@ -99,10 +99,6 @@
       "indexes": []
     },
     {
-      "name": "credentials",
-      "indexes": []
-    },
-    {
       "name": "providerSettings",
       "indexes": [
         {
@@ -161,6 +157,18 @@
           "unique": false
         }
       ]
+    },
+    {
+      "name": "snapshots",
+      "indexes": [
+        {
+          "fields": {
+            "ownerOpenId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ]
     }
   ],
   "notes": [
@@ -168,6 +176,7 @@
     "No automatic TTL: pending drafts carry cleanupAfter; imports.markExpired discards expired raw material for the authenticated owner",
     "uploadTickets carry cleanupAfter and are released by cleanupOwnerUploads; no deployment timer is configured yet, so expired screenshots are removed on the next owner sweep",
     "providerSettings stores only the sealed keyEnvelope; providerUsage keeps per-day model and OCR counters",
-    "Only the API service identity writes these collections; never give clients administrative database credentials"
+    "Only the API service identity writes these collections; never give clients administrative database credentials",
+    "Current mini program uses snapshots as canonical state, including schedules; legacy record APIs are retained but are not a synchronization source."
   ]
 }

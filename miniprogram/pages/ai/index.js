@@ -2,6 +2,7 @@ const ai = require('../../lib/ai');
 const tools = require('../../lib/tools');
 const providers = require('../../lib/providers');
 const cloud = require('../../lib/cloud');
+const sync = require('../../lib/sync');
 const KEY = 'study_trial_v1';
 
 // towxml 是第三方大包，加载它本身就可能抛错（体积大、依赖多、解析器在模块顶层组装）。
@@ -68,12 +69,18 @@ Page({
   async checkCloudProvider() {
     if (!cloud.available()) return;
     try {
+      if (this.data.settings.apiKey) {
+        const migrated = await ai.persistSettings(this.data.settings, {cloudAvailable:true,call:cloud.call,setStorage:(k,v)=>wx.setStorageSync(k,v)});
+        this.setData({settings:migrated,hasKey:true,notice:'模型配置已迁移到云端，本机明文 Key 已移除'});
+        return;
+      }
       const remote = await cloud.call('providers.get', {});
       if (remote && remote.keyMasked) {
-        this.setData({ hasKey: true });
-        if (!this.data.settings.apiKey) {
-          this.setData({ settings: Object.assign({}, this.data.settings, { url: remote.url, model: remote.model }) });
-        }
+        const saved={url:remote.url,model:remote.model,apiKey:'',cloudSaved:true};
+        wx.setStorageSync(ai.SETTINGS_KEY,saved);
+        this.setData({hasKey:true,settings:saved});
+      } else {
+        this.setData({hasKey:false});
       }
     } catch (error) {
       console.warn('[ai] 云端模型配置查询失败：', error && error.code);
@@ -101,23 +108,14 @@ Page({
   closeSettings() { this.setData({ showSettings: false }); },
   field(e) { this.setData({ [`settings.${e.currentTarget.dataset.field}`]: e.detail.value }); },
   async saveSettings() {
-    const saved = ai.saveSettings((key, value) => wx.setStorageSync(key, value), this.data.settings);
-    const ok = ai.ready(saved);
-    this.setData({ settings: saved, hasKey: ok, showSettings: false });
-    // 同时把 Key 加密存到云端：清缓存后靠它继续用，前端不再依赖明文 Key。
-    if (cloud.available() && saved.apiKey) {
-      wx.showLoading({ title: '保存到云端…', mask: true });
-      try {
-        await cloud.call('providers.save', { url: saved.url, model: saved.model, key: saved.apiKey });
-        wx.hideLoading();
-        wx.showToast({ title: '已保存到云端', icon: 'success' });
-      } catch (error) {
-        wx.hideLoading();
-        wx.showToast({ title: '本地已存，云端失败：' + ((error && error.code) || ''), icon: 'none' });
-      }
-      return;
-    }
-    wx.showToast({ title: ok ? '已保存' : '还缺 API Key', icon: ok ? 'success' : 'none' });
+    wx.showLoading({title:'保存配置…',mask:true});
+    try {
+      const saved=await ai.persistSettings(this.data.settings,{cloudAvailable:cloud.available(),call:cloud.call,setStorage:(k,v)=>wx.setStorageSync(k,v)});
+      this.setData({settings:saved,hasKey:ai.ready(saved),showSettings:false});
+      wx.showToast({title:saved.cloudSaved?'已安全保存到云端':'已保存到本机',icon:'success'});
+    } catch(error) {
+      this.setData({notice:'保存失败，原配置未变：'+(error.message||error.code)});
+    } finally {wx.hideLoading();}
   },
   chooseImage() {
     wx.chooseMedia({
@@ -127,11 +125,12 @@ Page({
       success: (result) => {
         const file = result.tempFiles && result.tempFiles[0];
         if (!file) return;
+        if(file.size>1500000){wx.showToast({title:'图片过大，请裁剪后重试',icon:'none'});return;}
         const extension = (file.tempFilePath.split('.').pop() || 'jpg').toLowerCase();
         wx.getFileSystemManager().readFile({
           filePath: file.tempFilePath,
           encoding: 'base64',
-          success: (read) => this.setData({ pendingImage: `data:image/${extension === 'png' ? 'png' : 'jpeg'};base64,${read.data}` }),
+          success: (read) => {if(read.data.length>2000000){wx.showToast({title:'图片过大，请裁剪后重试',icon:'none'});return;}this.setData({pendingImage:`data:image/${extension==='png'?'png':'jpeg'};base64,${read.data}`});},
           fail: () => wx.showToast({ title: '读取图片失败', icon: 'none' })
         });
       }
@@ -152,6 +151,8 @@ Page({
     });
   },
   async send() {
+    if(this.data.sending)return;
+    const latest=wx.getStorageSync(KEY);if(latest&&Array.isArray(latest.tasks))this.store=latest;
     const text = this.data.input.trim();
     const image = this.data.pendingImage;
     if (!text && !image) return;
@@ -166,25 +167,48 @@ Page({
     this.history.push({ role: 'user', content });
     try {
       const result = await ai.runAgent({
-        messages: [{ role: 'system', content: ai.systemPrompt({ date: this.data.today, courses: this.store.courses, tasks: this.store.tasks }) }, ...this.history.slice(-10)],
+        messages: [{ role: 'system', content: ai.systemPrompt({ date: today(), courses: this.store.courses, tasks: this.store.tasks }) }, ...ai.trimHistory(this.history)],
         request: (history) => ai.requestModel({ settings: this.data.settings, messages: history, tools: tools.TOOLS }),
         execute: async (name, args) => {
+          if(this.disposed)return {store:this.store,result:{ok:false,reason:'页面已关闭，未执行操作'}};
+          const current=wx.getStorageSync(KEY);if(current&&Array.isArray(current.tasks))this.store=current;
+          if(name==='recommend_resources'){
+            await sync.flush();
+            if(sync.status().dirty)return {store:this.store,result:{ok:false,reason:'请先解决云端同步问题'}};
+            try{return {store:this.store,result:{ok:true,...await cloud.call('resources.recommendSnapshot',{})}};}catch(error){return {store:this.store,result:{ok:false,reason:error.code==='BILI_UNAVAILABLE'?'B站暂时无法检索，请稍后重试':error.message}};}
+          }
+          if(name==='generate_plan'&&cloud.available()){
+            sync.save(this.store);try{this.store=await sync.generatePlan();return {store:this.store,result:{ok:this.store.planStatus!=='needs_attention',blocks:this.store.blocks,unscheduled:this.store.unscheduled,reason:this.store.planMessage}};}catch(error){return {store:this.store,result:{ok:false,reason:error.message}};}
+          }
+          if(name==='create_task'||name==='create_course'){
+            const approved=await new Promise(resolve=>wx.showModal({title:'确认 AI 整理结果',content:name==='create_task'?`任务：${args.title||''}\n课程：${args.courseName||'未关联'}\n截止：${args.dueAt||'未提供'}\n预计：${args.remainingMinutes||60} 分钟（估算，可修改）`:`课程：${args.name||''}\n学期：${args.semester||'未提供'}`,success:r=>resolve(Boolean(r.confirm)),fail:()=>resolve(false)}));
+            if(!approved)return {store:this.store,result:{ok:false,reason:'用户取消保存，未创建数据'}};
+            if(this.disposed)return {store:this.store,result:{ok:false,reason:'页面已关闭，未创建数据'}};
+            const current=wx.getStorageSync(KEY);if(current&&Array.isArray(current.tasks))this.store=current;
+          }
           const outcome = tools.executeTool(this.store, name, args, { now: new Date().toISOString(), date: this.data.today, id: () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7) });
           // 删除不在工具里直接执行：先问用户，确认后才真正移除。
           if (outcome.result && outcome.result.needsConfirmation) {
+            const before=this.store.tasks.find(task=>task.id===outcome.result.task.id);
             const approved = await this.confirmDelete(outcome.result.task);
             if (!approved) return { store: this.store, result: { ok: false, reason: '用户取消了删除' } };
+            const current=wx.getStorageSync(KEY);if(current&&Array.isArray(current.tasks))this.store=current;
+            const after=this.store.tasks.find(task=>task.id===outcome.result.task.id);
+            if(this.disposed||JSON.stringify(before)!==JSON.stringify(after))return {store:this.store,result:{ok:false,reason:'任务已变化或页面已关闭，请重新确认删除'}};
             const removed = tools.removeTask(this.store, outcome.result.task.id);
-            this.store = removed.store;
-            wx.setStorageSync(KEY, this.store);
+            this.store = require('../../lib/study-plan').autoReplan(removed.store,new Date().toISOString());
+            sync.save(this.store);
             return removed;
           }
           this.store = outcome.store;
-          wx.setStorageSync(KEY, this.store);
+          if(outcome.result&&outcome.result.ok&&name!=='list_tasks'){
+            if(name==='create_task'||name==='create_course')this.store=require('../../lib/study-plan').autoReplan(this.store,new Date().toISOString());
+            sync.save(this.store);
+          }
           return outcome;
         }
       });
-      this.history = result.history.slice(-10);
+      this.history = ai.trimHistory(result.history.filter(message=>message.role!=='system'));
       const actions = ai.describeRecords(result.records);
       const appended = [...this.data.messages, { role: 'assistant', text: result.reply || '（模型没有返回内容）', nodes: render(result.reply) }];
       if (actions.length) appended.push({ role: 'system', text: actions.join('；') });
@@ -193,5 +217,7 @@ Page({
       this.setData({ messages: [...this.data.messages, { role: 'system', text: `出错了：${error.message}` }], sending: false });
     }
   },
+  onHide(){sync.flush();},
+  onUnload(){this.disposed=true;sync.flush();},
   back() { wx.navigateBack(); }
 });

@@ -42,6 +42,17 @@ test('bilibili failure never produces fabricated links', async () => {
   await assert.rejects(searchVideos({ keyword: '线代' }, { biliRequest: offline }), error => error.code === 'BILI_UNAVAILABLE');
 });
 
+test('bilibili errors identify the failed stage without exposing upstream secrets',async()=>{
+ const cases=[
+  {request:async()=>({ok:false,status:412}),message:/获取签名：HTTP 412/},
+  {request:async()=>{throw Error('network COOKIE_SECRET keyword_secret');},message:/获取签名：网络请求失败/},
+  {request:async url=>({ok:true,status:200,json:async()=>url.includes('/nav')?NAV:{code:-412,message:'COOKIE_SECRET keyword_secret'}}),message:/搜索视频：接口代码 -412/}
+ ];
+ for(const c of cases)await assert.rejects(searchVideos({keyword:'keyword_secret'},{biliRequest:c.request}),error=>{
+  assert.equal(error.code,'BILI_UNAVAILABLE');assert.match(error.message,c.message);assert.doesNotMatch(error.message,/COOKIE_SECRET|keyword_secret/);return true;
+ });
+});
+
 test('ranking prefers material that matches the scope and fits remaining time', () => {
   const ranked = rankItems([
     item({ bvid: 'BVlong', title: '高等数学 全套课程 3小时', durationSeconds: 10800, play: 900000 }),
@@ -93,4 +104,16 @@ test('keyword and target selection use user data, not guesses', () => {
     { id: 'c', type: 'assignment', priority: 'high', dueAt: '2026-11-04' }
   ], 2);
   assert.deepEqual(targets.map(task => task.id), ['b', 'c']);
+});
+
+test('snapshot recommendations use the current app IDs and course scope without legacy records',async()=>{
+  const repository=createMemoryRepository(),keywords=[];
+  const deps={repository,now:()=> '2026-11-06T08:00:00.000Z',searchVideos:async({keyword})=>{keywords.push(keyword);return {fetchedAt:'2026-11-06T08:00:00Z',items:[item()]};}};
+  const call=(action,payload)=>api.handleAction({owner:'alice',action,payload},deps);
+  const store={courses:[{id:'local-course',name:'高等数学',importance:'high',mastery:'low'}],tasks:[{id:'local-task',courseId:'local-course',title:'期末复习',type:'exam',status:'open',remainingMinutes:30,examScope:'极限，导数'}],availability:[],blocks:[],unscheduled:[],previous:null};
+  assert.equal((await call('sync.push',{store,expectedRevision:0})).ok,true);
+  const result=await call('resources.recommendSnapshot',{taskIds:['local-task']});
+  assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.data.results[0].taskId,'local-task');
+  assert.match(keywords[0],/高等数学.*极限/);
+  assert.deepEqual(await repository.list('alice','tasks'),[]);
 });

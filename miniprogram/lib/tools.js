@@ -4,6 +4,7 @@
 
 const TYPE_INDEX = { homework: 0, experiment: 1, exam: 2, other: 3 };
 const PRIORITY_INDEX = { low: 0, medium: 1, high: 2 };
+const planning = require('./study-plan');
 
 function uid(seed) {
   return `${seed}${Math.random().toString(36).slice(2, 8)}`;
@@ -89,13 +90,24 @@ function createCourse(store, args, { id }) {
 }
 
 function updateTaskStatus(store, args) {
-  const task = findTask(store, args.title);
+  const matches=findTaskCandidates(store,args.title);
+  if(matches.length>1)return {store,result:{ok:false,ambiguous:true,reason:'有多条匹配，请指定完整标题',candidates:matches.map(brief)}};
+  const task = matches[0];
   if (!task) return { store, result: { ok: false, reason: `找不到未完成任务「${args.title || ''}」` } };
   const status = args.status === 'open' ? 'open' : 'completed';
   return {
     store: { ...store, tasks: store.tasks.map(item => (item.id === task.id ? { ...item, status, version: (item.version || 0) + 1 } : item)) },
     result: { ok: true, id: task.id, title: task.title, status }
   };
+}
+
+function updateProgress(store,args,context) {
+  const matches=findTaskCandidates(store,args.title);
+  if(matches.length!==1)return {store,result:{ok:false,ambiguous:matches.length>1,reason:matches.length?'请指定完整任务标题':'找不到任务',candidates:matches.map(brief)}};
+  if(!Number.isInteger(args.remainingMinutes)||args.remainingMinutes<0||args.remainingMinutes>10000)return {store,result:{ok:false,reason:'请提供有效的剩余分钟数（0—10000）'}};
+  const task=matches[0],status=args.completed===true?'completed':'in_progress';
+  const next={...store,tasks:store.tasks.map(t=>t.id===task.id?{...t,remainingMinutes:args.remainingMinutes,status,version:(t.version||0)+1}:t)};
+  return {store:planning.autoReplan(next,context.now),result:{ok:true,id:task.id,title:task.title,remainingMinutes:args.remainingMinutes,status}};
 }
 
 // 删除分两步：工具本身不动数据，只说明命中了哪一条；页面弹确认框后调 removeTask。
@@ -150,6 +162,9 @@ function listTasks(store, args, { date }) {
 }
 
 const TOOLS = [
+  {type:'function',function:{name:'update_task_progress',description:'记录任务实际剩余分钟数并自动调整已有计划；只有用户明确说完成时才传 completed=true。',parameters:{type:'object',required:['title','remainingMinutes'],properties:{title:{type:'string'},remainingMinutes:{type:'integer',minimum:0,maximum:10000},completed:{type:'boolean'}}}}},
+  {type:'function',function:{name:'generate_plan',description:'根据已录入的任务与可用时段生成学习计划，保留固定安排。',parameters:{type:'object',properties:{}}}},
+  {type:'function',function:{name:'recommend_resources',description:'实时检索哔哩哔哩课程资源；引用工具返回的原始视频链接，不得编造链接。',parameters:{type:'object',properties:{}}}},
   {
     type: 'function',
     function: {
@@ -219,7 +234,9 @@ function executeTool(store, name, args, context) {
   const input = args && typeof args === 'object' ? args : {};
   if (name === 'create_task') return createTask(store, input, context);
   if (name === 'create_course') return createCourse(store, input, context);
-  if (name === 'update_task_status') return updateTaskStatus(store, input);
+  if (name === 'update_task_status') {const r=updateTaskStatus(store,input);return r.result.ok?{...r,store:planning.autoReplan(r.store,context.now)}:r;}
+  if (name === 'update_task_progress') return updateProgress(store,input,context);
+  if (name === 'generate_plan') {const next=planning.generate(store,context.now);return {store:next,result:{ok:next.planStatus!=='needs_attention',blocks:next.blocks,unscheduled:next.unscheduled,reason:next.planMessage}};}
   if (name === 'delete_task') return deleteTask(store, input);
   if (name === 'list_tasks') return listTasks(store, input, context);
   return { store, result: { ok: false, reason: `不支持的动作 ${name}` } };

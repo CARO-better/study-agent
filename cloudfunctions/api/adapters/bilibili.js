@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const { safeRequest } = require('./safe-http');
-const { fail } = require('../core/errors');
+const { fail, DomainError } = require('../core/errors');
 
 const NAV = 'https://api.bilibili.com/x/web-interface/nav';
 const SEARCH = 'https://api.bilibili.com/x/web-interface/wbi/search/type';
@@ -39,7 +39,15 @@ function durationSeconds(value) {
   return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
-async function getJson(url, deps) {
+// Only fixed stage names and numeric status codes reach the caller. Never expose
+// upstream bodies, request headers, cookies, search terms or raw network errors.
+function unavailable(stage, reason) {
+  const error = new DomainError('BILI_UNAVAILABLE');
+  error.message = `哔哩哔哩暂时无法检索（${stage}：${reason}），请稍后重试`;
+  throw error;
+}
+
+async function getJson(url, deps, stage) {
   const request = deps.biliRequest || safeRequest;
   let response;
   try {
@@ -53,9 +61,11 @@ async function getJson(url, deps) {
         ...(deps.biliCookie ? { cookie: deps.biliCookie } : {})
       }
     });
-  } catch { fail('BILI_UNAVAILABLE'); }
-  if (!response || !response.ok) fail('BILI_UNAVAILABLE');
-  try { return await response.json(); } catch { fail('BILI_UNAVAILABLE'); }
+  } catch (error) {
+    unavailable(stage, error && error.message === 'Unsafe destination' ? '域名解析被安全检查拦截' : '网络请求失败');
+  }
+  if (!response || !response.ok) unavailable(stage, response && Number.isInteger(response.status) ? `HTTP ${response.status}` : '无有效响应');
+  try { return await response.json(); } catch { unavailable(stage, '响应格式异常'); }
 }
 
 // Real search results only: every item carries an actual bvid and a canonical
@@ -63,15 +73,15 @@ async function getJson(url, deps) {
 async function searchVideos({ keyword, limit = 8 }, deps) {
   if (typeof keyword !== 'string' || !keyword.trim() || keyword.length > 100) fail('VALIDATION');
   const size = Math.min(Math.max(Number(limit) || 8, 1), 20);
-  const nav = await getJson(NAV, deps);
+  const nav = await getJson(NAV, deps, '获取签名');
   const images = nav && nav.data && nav.data.wbi_img;
-  if (!images || !images.img_url || !images.sub_url) fail('BILI_UNAVAILABLE');
+  if (!images || !images.img_url || !images.sub_url) unavailable('获取签名', nav && Number.isInteger(nav.code) ? `接口代码 ${nav.code}` : '缺少签名信息');
   const mixin = mixinKey(wbiKey(images.img_url), wbiKey(images.sub_url));
   const query = signQuery({
     search_type: 'video', keyword: keyword.trim(), page: 1, page_size: size, wts: Math.floor(Date.now() / 1000)
   }, mixin);
-  const body = await getJson(`${SEARCH}?${query}`, deps);
-  if (!body || body.code !== 0 || !body.data || !Array.isArray(body.data.result)) fail('BILI_UNAVAILABLE');
+  const body = await getJson(`${SEARCH}?${query}`, deps, '搜索视频');
+  if (!body || body.code !== 0 || !body.data || !Array.isArray(body.data.result)) unavailable('搜索视频', body && Number.isInteger(body.code) && body.code !== 0 ? `接口代码 ${body.code}` : '缺少视频结果');
   const items = body.data.result
     .filter(item => item && typeof item.bvid === 'string' && item.bvid && item.title)
     .map(item => ({

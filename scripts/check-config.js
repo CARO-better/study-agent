@@ -20,8 +20,12 @@ function checkConfig(config) {
 if (require.main === module) {
   let result;
   try {
-    const filename = process.argv[2] || path.join(__dirname, '../deployment/config.example.json');
-    result = checkConfig(JSON.parse(readFileSync(filename, 'utf8').replace(/^\uFEFF/, '')));
+    if (process.argv[2]) result = checkConfig(JSON.parse(readFileSync(process.argv[2], 'utf8').replace(/^\uFEFF/, '')));
+    else {
+      const mini = require('../miniprogram/config');
+      const project = JSON.parse(readFileSync(path.join(__dirname, '../project.config.json'), 'utf8').replace(/^\uFEFF/, ''));
+      result = checkConfig({envId:mini.envId,appId:project.appid});
+    }
   } catch {
     // Do not expose parser excerpts, file contents, or provider error messages.
     result = { ready: false, missing: ['configFile'] };

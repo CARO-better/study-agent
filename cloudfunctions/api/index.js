@@ -76,7 +76,7 @@ function bootReport() {
       report.steps.push(`${name}: ok`);
       return value;
     } catch (error) {
-      report.steps.push(`${name}: FAIL ${(error && (error.message || error.errMsg)) || error}`);
+      report.steps.push(`${name}: FAIL`);
       return null;
     }
   };

@@ -1,3 +1,19 @@
+# 当前小程序快照接口补充（0.2.0）
+
+`sync.pull` 返回完整 payload/revision/updatedAt。`sync.push` 输入 `{store, expectedRevision, device?}`；服务端原子比较修订号，旧版本返回 CONFLICT。大小按 UTF-8 字节计算，上限 512KiB。
+
+`sync.plan` 输入 `{store, expectedRevision}`，云端计算计划并在同一修订协议下保存完整快照，返回 `{store, revision, updatedAt, bytes}`。计划、课程、任务继续使用当前小程序 ID，旧记录类 API 保留兼容。
+
+`resources.recommendSnapshot` 输入可选 taskIds/limitPerTask/maxTasks，从当前用户完整快照取任务及课程，不从旧 tasks/courses 表取数据。
+
+`ai.chat` 接受字符串和受限用户 text/image_url 内容块；仅接受 PNG/JPEG data URL；总图片编码上限 2MiB。检查工具调用与回执配对。模型 HTTP 请求大小上限 3MiB、超时 25 秒。客户端仅在明确未配置云环境时保留旧直连能力。
+
+数据库所有集合的客户端读写均关闭，OPENID 隔离在云函数服务端执行。`api` 现有 Event/Nodejs20.19 保持，执行超时调整为 60 秒。主密钥与供应商 Key 不得输出或提交。
+
+---
+
+以下保留原有领域 API 的详细契约，不能将旧业务表误当成当前快照恢复来源。
+
 # API and repository contracts (Task 2)
 
 Deploy `cloudfunctions/api/` as a self-contained function package; run `npm ci --ignore-scripts` there before upload. Entry: `index.main`. Pinned SDK: `wx-server-sdk@3.0.1` with lockfile. No real environment is configured and no deployment has been performed.

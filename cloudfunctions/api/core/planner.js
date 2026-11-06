@@ -11,7 +11,7 @@ function buildPlan({tasks=[], availability=[], fixedBlocks=[], now, horizonDays=
   function subtract(a,b) { free=free.flatMap(([s,e])=> b<=s||a>=e ? [[s,e]] : [[s,Math.min(a,e)],[Math.max(b,s),e]].filter(([x,y])=>x<y)); }
   for(const block of fixedBlocks) { const a=time(block.start), b=time(block.end); if(Number.isFinite(a)&&Number.isFinite(b)&&a<b) subtract(a-(block.taskId?breakMinutes*minute:0),b+(block.taskId?breakMinutes*minute:0)); }
   const blocks=[],unscheduled=[],reasons=[];
-  const ordered=tasks.filter(t=>!['completed','cancelled'].includes(t.status)&&t.remainingMinutes>0).slice().sort((a,b)=>deadline(a.dueAt)-deadline(b.dueAt) || (b.type==='exam')-(a.type==='exam') || ({high:3,medium:2,low:1}[b.priority]||2)-({high:3,medium:2,low:1}[a.priority]||2) || String(a.id).localeCompare(String(b.id)));
+  const ordered=tasks.filter(t=>!['completed','cancelled'].includes(t.status)&&t.remainingMinutes>0).slice().sort((a,b)=>deadline(a.dueAt)-deadline(b.dueAt) || (b.type==='exam')-(a.type==='exam') || ({high:3,medium:2,low:1}[b.priority]||2)-({high:3,medium:2,low:1}[a.priority]||2) || ({high:3,medium:2,low:1}[b.courseImportance]||2)-({high:3,medium:2,low:1}[a.courseImportance]||2) || ({low:0,medium:1,high:2}[a.mastery]??1)-({low:0,medium:1,high:2}[b.mastery]??1) || String(a.id).localeCompare(String(b.id)));
   for(const task of ordered) {
     let left=task.remainingMinutes; const due=deadline(task.dueAt); let index=0;
     while(left>=minMinutes && index<free.length) {

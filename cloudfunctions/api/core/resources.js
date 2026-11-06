@@ -54,6 +54,8 @@ function pickTargets(tasks, limit) {
   return [...tasks].sort((a, b) => {
     const exam = (b.type === 'exam' ? 1 : 0) - (a.type === 'exam' ? 1 : 0);
     if (exam) return exam;
+    const importance=(PRIORITY[a.courseImportance]??1)-(PRIORITY[b.courseImportance]??1);
+    if(importance)return importance;
     const priority = (PRIORITY[a.priority] ?? 1) - (PRIORITY[b.priority] ?? 1);
     if (priority) return priority;
     const mastery = (a.mastery === 'low' ? 0 : a.mastery === 'medium' ? 1 : 2) - (b.mastery === 'low' ? 0 : b.mastery === 'medium' ? 1 : 2);
@@ -62,9 +64,10 @@ function pickTargets(tasks, limit) {
   }).slice(0, limit);
 }
 
-async function recommend({ owner, payload }, deps) {
-  const tasks = await deps.repository.list(owner, 'tasks');
-  const courses = await deps.repository.list(owner, 'courses');
+async function recommend({ owner, payload, snapshot }, deps) {
+  const courses = snapshot?snapshot.courses:await deps.repository.list(owner, 'courses');
+  const source = snapshot?snapshot.tasks:await deps.repository.list(owner, 'tasks');
+  const tasks=source.map(task=>{const course=courses.find(c=>c.id===task.courseId)||{};return {...task,status:task.status==='open'?'pending':task.status,mastery:task.mastery||course.mastery,courseImportance:course.importance||course.priority};});
   const wanted = Array.isArray(payload.taskIds) && payload.taskIds.length ? new Set(payload.taskIds) : null;
   const candidates = tasks.filter(task => ['pending', 'in_progress'].includes(task.status) && (!wanted || wanted.has(task.id)));
   if (!candidates.length) return { source: 'bilibili-search', results: [], note: '没有待处理的任务可推荐' };
@@ -93,6 +96,12 @@ async function handleResources({ owner, action, payload }, deps) {
     return { source: 'bilibili-search', items: rankItems(found.items, { terms: [String(payload.keyword || '').trim()] }), fetchedAt: found.fetchedAt };
   }
   if (action === 'resources.recommend') return recommend({ owner, payload }, deps);
+  if (action === 'resources.recommendSnapshot') {
+    const record=await deps.repository.get(owner,'snapshots','default');
+    if(!record||!record.payload)return {source:'bilibili-search',results:[],note:'请先同步学习数据'};
+    if(payload.taskIds!==undefined&&(!Array.isArray(payload.taskIds)||payload.taskIds.length>20||!payload.taskIds.every(id=>typeof id==='string'&&id.length<=200)))fail('VALIDATION');
+    return recommend({owner,payload,snapshot:record.payload},deps);
+  }
   fail('UNKNOWN_ACTION');
 }
 

@@ -140,3 +140,30 @@ test('records are described in Chinese for the chat transcript', () => {
   assert.match(lines[1], /没添加/);
   assert.match(lines[2], /标记为完成/);
 });
+
+test('progress feedback updates remaining work and regenerates an existing plan',()=>{
+  const store={...emptyStore(),tasks:[{id:'p',title:'复习线代',status:'open',remainingMinutes:90,version:1}],availability:[{start:'2026-11-06T10:00:00Z',end:'2026-11-06T13:00:00Z'}],lastGeneratedAt:'2026-11-06T08:00:00Z'};
+  const result=tools.executeTool(store,'update_task_progress',{title:'复习线代',remainingMinutes:30},{...context(),now:'2026-11-06T08:00:00Z'});
+  assert.equal(result.result.ok,true);assert.equal(result.store.tasks[0].remainingMinutes,30);assert.equal(result.store.blocks.length,1);
+});
+test('ambiguous progress updates cannot mark an arbitrary task complete',()=>{
+  const store={...emptyStore(),tasks:[{id:'a',title:'报告一',status:'open'},{id:'b',title:'报告二',status:'open'}]};
+  const result=tools.executeTool(store,'update_task_status',{title:'报告',status:'completed'},context());
+  assert.equal(result.result.ambiguous,true);assert.deepEqual(result.store,store);
+});
+test('history truncation starts with a user turn instead of an orphan tool result',()=>{
+  const history=[{role:'user',content:'old'},...Array.from({length:21},(_,i)=>({role:i%2?'tool':'assistant',content:'x'})),{role:'user',content:'new'}];
+  assert.deepEqual(ai.trimHistory(history),[{role:'user',content:'new'}]);
+});
+test('malformed tool arguments cannot be turned into a default write operation',async()=>{
+  let executed=false;
+  await assert.rejects(ai.runAgent({messages:[{role:'user',content:'test'}],request:async()=>({choices:[{message:{tool_calls:[{id:'x',function:{name:'create_task',arguments:'broken'}}]}}]}),execute:async()=>{executed=true;return {result:{ok:true}};}}),error=>error.code==='MODEL_BAD_RESPONSE');
+  assert.equal(executed,false);
+});
+test('history retains only the newest screenshot while preserving older tool receipts',()=>{
+  const image='data:image/png;base64,'+'A'.repeat(1400000);
+  const old=[{role:'user',content:ai.buildUserContent({text:'旧截图',image})},{role:'assistant',content:'已整理'},{role:'user',content:ai.buildUserContent({text:'新截图',image})}];
+  const trimmed=ai.trimHistory(old);
+  const count=trimmed.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length;
+  assert.equal(count,1);assert.equal(old[0].content.length,2);assert.equal(trimmed[1].content,'已整理');
+});
