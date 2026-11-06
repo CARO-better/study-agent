@@ -68,3 +68,29 @@ test('pushes are serialized and later local edits remain pending until acknowled
   assert.equal((await call('sync.pull')).data.payload.tasks[0].title,'second');
   assert.equal(sync.status().state,'synced');
 });
+
+test('explicit restore rejects edits made while the remote snapshot is loading',async()=>{
+  const call=backend();await call('sync.push',{store:{...blank(),tasks:[{id:'remote',title:'old'}]},expectedRevision:0});
+  let release;const gate=new Promise(r=>{release=r;});
+  const {sync,storage}=client(async(a,p)=>{if(a==='sync.pull')await gate;return call(a,p);},
+    {study_trial_v1:blank(),study_sync_meta_v2:{initialized:true,revision:0,generation:0,dirty:false}});
+  const restoring=sync.restoreRemote();
+  sync.save({...blank(),tasks:[{id:'local',title:'new edit'}]});
+  release();
+  await assert.rejects(restoring,{code:'LOCAL_CHANGED'});
+  assert.equal(storage.study_trial_v1.tasks[0].id,'local');
+  assert.equal(sync.status().dirty,true);
+  assert.equal(storage[sync.RECOVERY_KEY],undefined);
+  await sync.flush();
+  assert.equal(sync.status().state,'conflict');
+});
+
+test('a fixed-course-only device requires a choice before its first cloud restore',async()=>{
+  const call=backend();await call('sync.push',{store:blank(),expectedRevision:0});
+  const local={...blank(),fixedBlocks:[{id:'lecture',start:'2026-11-20T01:00:00.000Z',end:'2026-11-20T02:00:00.000Z'}]};
+  const {sync,storage}=client(call,{study_trial_v1:local});
+  const result=await sync.reconcile();
+  assert.equal(result.restored,false);
+  assert.deepEqual(storage.study_trial_v1,local);
+  assert.equal(sync.status().state,'conflict');
+});

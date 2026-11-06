@@ -47,7 +47,7 @@ async function reconcile() {
   if(pulling)return pulling;
   pulling=(async()=>{
     const started=meta(),remote=await pull(),current=meta(),local=read(STORE_KEY);
-    const hasLocal=local&&['courses','tasks','availability','blocks'].some(k=>Array.isArray(local[k])&&local[k].length);
+    const hasLocal=local&&['courses','tasks','availability','fixedBlocks','blocks'].some(k=>Array.isArray(local[k])&&local[k].length);
     const changed=current.generation!==started.generation||current.dirty;
     if(!remote.store){
       writeMeta({initialized:true,revision:0});
@@ -88,8 +88,10 @@ async function flush() {
   return pushing;
 }
 async function restoreRemote() {
+  const started=meta();
   if(pushing)await pushing;const remote=await pull();
   if(!remote.store)throw Error('云端还没有完整快照，请先在原设备同步');
+  if(meta().generation!==started.generation)throw Object.assign(Error('恢复期间本机数据发生变化，已保留最新改动，请重新确认恢复'),{code:'LOCAL_CHANGED'});
   if(timer){clearTimeout(timer);timer=null;}return applyRemote(remote);
 }
 async function overwriteRemote() {
