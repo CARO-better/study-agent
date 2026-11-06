@@ -1,5 +1,6 @@
 <view class="chat">
   <view class="chat-head"><text class="chat-title">AI 助理</text><text class="link" bindtap="openSettings">设置</text></view>
+  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
   <view wx:if="{{!hasKey}}" class="notice">还没有填 API Key。点右上角「设置」填服务地址、模型名和 Key；Key 只保存在本机。</view>
   <view class="thread">
     <view wx:if="{{!messages.length}}" class="empty">可以直接说「明天交高数作业，预计一小时」，也可以发一张课表或作业截图，我会整理成待办。</view>

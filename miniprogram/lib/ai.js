@@ -2,6 +2,8 @@
 // 客户端直连模型的最小 Agent：一次请求 → 模型决定调工具 → 本地执行 → 把结果回给模型 → 直到它给结论。
 // 网络只在 requestModel 里，请求函数可注入，方便用 node 测整个循环。
 
+const cloud = require('./cloud');
+
 const SETTINGS_KEY = 'study_ai_v1';
 const DEFAULT_URL = 'https://api.deepseek.com/chat/completions';
 const DEFAULT_MODEL = 'deepseek-flash';
@@ -82,7 +84,24 @@ async function runAgent({ messages, request, execute, maxRounds = MAX_ROUNDS }) 
 }
 
 // Network boundary. Never puts the key into any error message or log.
-function requestModel({ settings, messages, tools }) {
+// 优先走云函数：Key 以密文存在服务端，前端不接触明文，清缓存也不会丢。
+// 只有「云端没配模型」且「本地有 Key」时才退回直连，兼容还没上云的情况。
+async function requestModel({ settings, messages, tools }) {
+  if (cloud.available()) {
+    try {
+      const data = await cloud.call('ai.chat', { messages, tools });
+      return { choices: [{ message: data.message }], model: data.model, usage: data.usage };
+    } catch (error) {
+      const cloudSide = ['PROVIDER_UNCONFIGURED', 'MASTER_KEY_MISSING'];
+      const localReady = Boolean(settings && settings.apiKey && settings.url && settings.model);
+      if (!cloudSide.includes(error.code) || !localReady) throw error;
+    }
+  }
+  return requestModelDirect({ settings, messages, tools });
+}
+
+// 本地直连：Key 在手机本地，请求直接从手机发出。
+function requestModelDirect({ settings, messages, tools }) {
   return new Promise((resolve, reject) => {
     wx.request({
       url: settings.url,

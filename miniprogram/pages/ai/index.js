@@ -1,11 +1,24 @@
 const ai = require('../../lib/ai');
 const tools = require('../../lib/tools');
 const providers = require('../../lib/providers');
-const towxml = require('../../towxml/index');
+const cloud = require('../../lib/cloud');
 const KEY = 'study_trial_v1';
+
+// towxml 是第三方大包，加载它本身就可能抛错（体积大、依赖多、解析器在模块顶层组装）。
+// 这里的 require 必须被 try 包住：否则一旦加载失败，Page 注册整个失败，页面直接白屏，
+// 而 render() 里的 try 根本来不及执行。加载失败时降级为纯文本，AI 页仍然可用。
+let towxml = null;
+let towxmlError = '';
+try {
+  towxml = require('../../towxml/index');
+} catch (error) {
+  towxmlError = (error && error.message) || String(error);
+  console.error('[ai] towxml 加载失败，Markdown 降级为纯文本：', towxmlError);
+}
 
 // Markdown → WXML 节点；解析失败就退回纯文本，不要因为排版把整条消息吞掉。
 function render(text) {
+  if (!towxml) return null;
   try {
     return towxml(String(text || ''), 'markdown');
   } catch (error) {
@@ -32,14 +45,42 @@ Page({
     visionHint: ''
   },
   onLoad() {
-    const saved = wx.getStorageSync(KEY);
-    this.store = saved && saved.courses ? saved : fresh();
-    const settings = ai.readSettings(wx.getStorageSync);
-    this.setData({ settings, hasKey: ai.ready(settings) });
+    // 初始化任何一步抛错都会让页面停在空白态且没有任何提示，所以整段包起来，
+    // 出错时退到可用的空状态，并把原因写进 notice 显示给用户。
     this.history = [];
+    try {
+      const saved = wx.getStorageSync(KEY);
+      this.store = saved && saved.courses ? saved : fresh();
+      const settings = ai.readSettings(key => wx.getStorageSync(key));
+      this.setData({ settings, hasKey: ai.ready(settings) });
+    } catch (error) {
+      console.error('[ai] onLoad 初始化失败：', error);
+      this.store = fresh();
+      const settings = ai.emptySettings();
+      this.setData({ settings, hasKey: false, notice: `初始化异常：${(error && error.message) || error}` });
+    }
+    if (towxmlError) {
+      this.setData({ notice: `富文本排版不可用，已降级为纯文本（${towxmlError}）` });
+    }
+    this.checkCloudProvider();
+  },
+  // 云端若已存过加密的 Key，清缓存后本地空了也能直接用 —— 界面按「已配置」处理。
+  async checkCloudProvider() {
+    if (!cloud.available()) return;
+    try {
+      const remote = await cloud.call('providers.get', {});
+      if (remote && remote.keyMasked) {
+        this.setData({ hasKey: true });
+        if (!this.data.settings.apiKey) {
+          this.setData({ settings: Object.assign({}, this.data.settings, { url: remote.url, model: remote.model }) });
+        }
+      }
+    } catch (error) {
+      console.warn('[ai] 云端模型配置查询失败：', error && error.code);
+    }
   },
   openSettings() {
-    const settings = ai.readSettings(wx.getStorageSync);
+    const settings = ai.readSettings(key => wx.getStorageSync(key));
     const matched = providers.matchPreset(settings);
     this.setData({
       showSettings: true,
@@ -59,10 +100,23 @@ Page({
   },
   closeSettings() { this.setData({ showSettings: false }); },
   field(e) { this.setData({ [`settings.${e.currentTarget.dataset.field}`]: e.detail.value }); },
-  saveSettings() {
-    const saved = ai.saveSettings(wx.setStorageSync, this.data.settings);
+  async saveSettings() {
+    const saved = ai.saveSettings((key, value) => wx.setStorageSync(key, value), this.data.settings);
     const ok = ai.ready(saved);
     this.setData({ settings: saved, hasKey: ok, showSettings: false });
+    // 同时把 Key 加密存到云端：清缓存后靠它继续用，前端不再依赖明文 Key。
+    if (cloud.available() && saved.apiKey) {
+      wx.showLoading({ title: '保存到云端…', mask: true });
+      try {
+        await cloud.call('providers.save', { url: saved.url, model: saved.model, key: saved.apiKey });
+        wx.hideLoading();
+        wx.showToast({ title: '已保存到云端', icon: 'success' });
+      } catch (error) {
+        wx.hideLoading();
+        wx.showToast({ title: '本地已存，云端失败：' + ((error && error.code) || ''), icon: 'none' });
+      }
+      return;
+    }
     wx.showToast({ title: ok ? '已保存' : '还缺 API Key', icon: ok ? 'success' : 'none' });
   },
   chooseImage() {

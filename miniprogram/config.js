@@ -8,7 +8,7 @@
 // 环境 ID 在哪看：微信开发者工具 → 左侧「云开发」→ 顶部的环境名称旁，或
 // 云开发控制台 → 设置 → 环境设置。
 module.exports = {
-  envId: '',
+  envId: 'cloud1-d2gobmqen9fd1cba1',
   // 云函数部署名，和云开发控制台里看到的一致；默认就是 api。
   apiFunctionName: 'api'
 };
