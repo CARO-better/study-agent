@@ -1,5 +1,7 @@
 # 2026-11-07 真机图片请求修复
 
+> 后续反馈：用户报告 1.1MB 图片可读、270KB 图片反而需压缩，尚未复现/解决。本文记录的是已有补丁，不是最终真机验收；排查见 [最新交接](../handoff-20261107-ui-followup.md)。
+
 用户真机报 cloud.callFunction data exceed max size；原链路允许 1.5MB 原图、2MB Base64，没有对传输参数做整体预算。开发工具中的合成小图验证未覆盖该问题。
 
 选择图片后逐级调用 wx.compressImage，读取压缩结果、按字节头选择 JPEG/PNG MIME；超过保守预算则提示裁剪。完整 messages/tools/action/payload JSON 按 UTF-8 检查，超限不清空输入或附件，不调用云函数。原生同类错误映射为短提示。

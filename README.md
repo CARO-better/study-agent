@@ -27,6 +27,6 @@ Node.js 版本范围见 package.json。运行 `npm test`、`npm run check-config
 
 ## 接手
 
-先读 [最新交接](docs/handoff-20261106-repair.md)、[AGENTS.md](AGENTS.md)。历史交接和原始产品设计留作决策依据，不按旧复选框重做已完成工作。
+先读 [最新接续交接](docs/handoff-20261107-ui-followup.md)（图片大小差异、AI 气泡与弹窗转场待办），再读 [云端修复交接](docs/handoff-20261106-repair.md)、[AGENTS.md](AGENTS.md)。历史交接和原始产品设计留作决策依据，不按旧复选框重做已完成工作。
 
 [更新日志](CHANGELOG.md) · [MIT](LICENSE)
