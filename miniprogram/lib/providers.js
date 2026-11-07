@@ -9,7 +9,7 @@ const PRESETS = [
     url: 'https://api.deepseek.com/chat/completions',
     model: 'deepseek-flash',
     vision: true,
-    note: 'deepseek-flash 官方支持读图，截图可以直接发'
+    note: '官方 Search API 支持联网检索；图片能力以当前官方文档与真机验证为准'
   },
   {
     id: 'kimi',

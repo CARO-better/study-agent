@@ -43,6 +43,16 @@ function reasonFor(code) {
     NOT_FOUND: '记录不存在或不属于当前用户',
     CONFLICT: '记录已被修改，需要重新读取后再改',
     HAS_DEPENDENTS: '有下级记录引用它，先处理引用',
+    MODEL_AUTH: '模型密钥无效或没有权限',
+    MODEL_QUOTA: '模型账户余额不足',
+    MODEL_RATE_LIMIT: '模型调用太频繁，请稍后再试',
+    SEARCH_UNAVAILABLE: '联网检索暂时不可用，请稍后重试',
+    SEARCH_AUTH: '当前模型密钥无法使用联网检索',
+    SEARCH_QUOTA: '模型账户余额不足，无法联网检索',
+    SEARCH_RATE_LIMIT: '联网检索太频繁，请稍后再试',
+    SEARCH_DAILY_LIMIT: '已达到当日联网检索上限',
+    SEARCH_NO_RESULTS: '没有检索到可用资料',
+    SEARCH_UNSUPPORTED: '当前模型不支持官方联网检索，请切换 DeepSeek',
     UNKNOWN_ACTION: '云函数不认识这个 action',
     INTERNAL: '云函数内部错误，看云端日志'
   };

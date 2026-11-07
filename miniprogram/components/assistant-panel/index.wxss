@@ -2,7 +2,7 @@
 :host { position: fixed; inset: 0; z-index: 60; }
 .assistant-appearance { min-height: 0; height: 100%; background: transparent; }
 .assistant-veil { position: absolute; inset: 0; background: var(--veil); animation: veil-in .2s ease-out; }
-.assistant-center { position: absolute; inset: 0; box-sizing: border-box; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.assistant-center { position: absolute; inset: 0; box-sizing: border-box; padding: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .assistant-panel { position: relative; box-sizing: border-box; width: 92vw; max-width: 560px; height: 760px; max-height: 86%; min-height: 0; border-radius: 32px; overflow: hidden; transform-origin: top left; opacity: 0; pointer-events: auto; }
 .assistant-panel.panel-ready { opacity: 1; animation: panel-from-orb .34s cubic-bezier(.2,.85,.25,1); }
 .assistant-panel.is-closing { opacity: .35; pointer-events: none; animation: panel-to-orb .24s cubic-bezier(.5,0,.9,.4) forwards; }

@@ -1,6 +1,6 @@
 <view class="appearance assistant-appearance theme-{{theme}} {{motionEnabled ? '' : 'reduce-motion'}}">
   <view class="assistant-veil" bindtap="dismiss"></view>
-  <view class="assistant-center">
+  <view class="assistant-center" style="padding:{{top + 12}}px 12px calc(84px + env(safe-area-inset-bottom));">
     <view class="assistant-panel glass {{closing ? 'is-closing' : ''}} {{panelReady ? 'panel-ready' : ''}}" style="{{panelStyle}}" catchtap="stop">
       <include src="../../templates/assistant.wxml"/>
     </view>

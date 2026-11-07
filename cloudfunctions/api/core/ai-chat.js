@@ -7,7 +7,7 @@
 // 为什么要走服务端：前端直连时 Key 必须以明文存在手机上，一清缓存就丢；
 // 加密存云端后又没有主密钥解不开。放在云函数里，Key 只以密文存在，请求也从服务端发出。
 
-const { fail } = require('./errors');
+const { fail, failWith } = require('./errors');
 const { decryptSecret } = require('./vault');
 const { safeRequest } = require('../adapters/safe-http');
 
@@ -56,6 +56,16 @@ function validateMessages(messages) {
 function chinaDate(iso) {
   return new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 10);
 }
+function isDeepSeek(url) {
+  try { return new URL(url).hostname === 'api.deepseek.com'; }
+  catch (_) { return false; }
+}
+function modelHttpFailure(status) {
+  if (status === 401 || status === 403) fail('MODEL_AUTH');
+  if (status === 402) fail('MODEL_QUOTA');
+  if (status === 429) fail('MODEL_RATE_LIMIT');
+  failWith('MODEL_HTTP', `模型接口返回 HTTP ${status || '未知状态'}，请检查模型配置或稍后重试`);
+}
 
 async function handleAiChat({ owner, action, payload }, deps) {
   if (action !== 'ai.chat') fail('UNKNOWN_ACTION');
@@ -85,6 +95,9 @@ async function handleAiChat({ owner, action, payload }, deps) {
   }
 
   const body = { model: setting.model, messages, temperature: 0.3, max_tokens: MAX_TOKENS };
+  // V4.1 Flash 默认开启 thinking；带 tools 的对话若下一轮丢掉 reasoning_content 会 400。
+  // 本项目要的是稳定的工具循环，显式关闭 thinking，也不把推理链展示给用户。
+  if (isDeepSeek(setting.url)) body.thinking = { type: 'disabled' };
   const tools = payload && payload.tools;
   if (Array.isArray(tools) && tools.length) {
     body.tools = tools;
@@ -102,14 +115,15 @@ async function handleAiChat({ owner, action, payload }, deps) {
       timeout: 25000
     });
   } catch (error) {
-    fail('MODEL_FAILED');
+    if (/timeout/i.test(String(error && error.message))) fail('MODEL_TIMEOUT');
+    fail('MODEL_NETWORK');
   }
-  if (!response.ok) fail('MODEL_FAILED');
+  if (!response.ok) modelHttpFailure(Number(response.status) || 0);
 
   let output;
-  try { output = await response.json(); } catch (error) { fail('MODEL_FAILED'); }
+  try { output = await response.json(); } catch (error) { fail('MODEL_BAD_RESPONSE'); }
   const message = output && output.choices && output.choices[0] && output.choices[0].message;
-  if (!message) fail('MODEL_FAILED');
+  if (!message) fail('MODEL_EMPTY');
 
   return {
     message,

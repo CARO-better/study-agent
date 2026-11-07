@@ -10,9 +10,11 @@ const { handleResources } = require('./core/resources');
 const { handlePlanner } = require('./core/plan-api');
 const { handleSnapshots } = require('./core/snapshots');
 const { handleAiChat } = require('./core/ai-chat');
+const { handleWebSearch } = require('./core/web-search');
 const { createCloudBaseRepository } = require('./adapters/repository');
 // Order matters: the specific imports actions are matched before the generic prefix.
 const ROUTES = [
+  [action => action.startsWith('web.'), handleWebSearch],
   [action => action.startsWith('sync.'), handleSnapshots],
   [action => action.startsWith('ai.'), handleAiChat],
   [action => action.startsWith('providers.'), handleProviders],
@@ -56,7 +58,7 @@ function createHandler(deps) {
 let productionHandler;
 function createProductionHandler(cloud) {
   cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
-  return createHandler({ getWXContext: () => cloud.getWXContext(), repository: createCloudBaseRepository(cloud.database({ throwOnNotFound: false })), cloud, cloudEnvId: process.env.STUDY_CLOUD_ENV_ID, cloudFilePrefix: process.env.STUDY_CLOUD_FILE_PREFIX, masterKey: process.env.STUDY_MASTER_KEY, ocrSecretId: process.env.STUDY_OCR_SECRET_ID, ocrSecretKey: process.env.STUDY_OCR_SECRET_KEY, ocrRegion: process.env.STUDY_OCR_REGION, ocrDailyLimit: Number(process.env.STUDY_OCR_DAILY_LIMIT) || undefined, biliCookie: process.env.STUDY_BILI_COOKIE || undefined, dailyCallLimit: Number(process.env.STUDY_DAILY_CALL_LIMIT) || undefined });
+  return createHandler({ getWXContext: () => cloud.getWXContext(), repository: createCloudBaseRepository(cloud.database({ throwOnNotFound: false })), cloud, cloudEnvId: process.env.STUDY_CLOUD_ENV_ID, cloudFilePrefix: process.env.STUDY_CLOUD_FILE_PREFIX, masterKey: process.env.STUDY_MASTER_KEY, ocrSecretId: process.env.STUDY_OCR_SECRET_ID, ocrSecretKey: process.env.STUDY_OCR_SECRET_KEY, ocrRegion: process.env.STUDY_OCR_REGION, ocrDailyLimit: Number(process.env.STUDY_OCR_DAILY_LIMIT) || undefined, biliCookie: process.env.STUDY_BILI_COOKIE || undefined, dailyCallLimit: Number(process.env.STUDY_DAILY_CALL_LIMIT) || undefined, dailySearchLimit: Number(process.env.STUDY_DAILY_SEARCH_LIMIT) || undefined });
 }
 // 启动自检：把「初始化链断在哪一步」暴露出来。
 // 普通的业务动作一旦在 createProductionHandler 阶段崩掉，会被压成 INTERNAL，看不出原因；

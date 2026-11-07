@@ -1,6 +1,7 @@
 'use strict';
 const messages = Object.freeze({
-  PROVIDER_UNCONFIGURED: '请先配置模型', MASTER_KEY_MISSING: '服务端主密钥未配置或已更换，无法解密模型 Key', OCR_UNCONFIGURED: '截图识别尚未配置', OCR_FAILED: '截图识别失败', MODEL_FAILED: '模型返回无效', USAGE_LIMIT: '已达到当日调用上限',
+  PROVIDER_UNCONFIGURED: '请先配置模型', MASTER_KEY_MISSING: '服务端主密钥未配置或已更换，无法解密模型 Key', OCR_UNCONFIGURED: '截图识别尚未配置', OCR_FAILED: '截图识别失败', MODEL_FAILED: '模型返回无效', MODEL_HTTP: '模型接口拒绝请求', MODEL_AUTH: '模型密钥无效或没有权限', MODEL_QUOTA: '模型账户余额不足', MODEL_RATE_LIMIT: '模型调用太频繁，请稍后再试', MODEL_NETWORK: '连接模型服务失败', MODEL_TIMEOUT: '模型响应超时', MODEL_BAD_RESPONSE: '模型响应格式异常', MODEL_EMPTY: '模型没有返回内容', USAGE_LIMIT: '已达到当日调用上限',
+  SEARCH_UNAVAILABLE: '联网检索暂时不可用，请稍后重试', SEARCH_AUTH: '当前模型密钥无法使用联网检索', SEARCH_QUOTA: '模型账户余额不足，无法联网检索', SEARCH_RATE_LIMIT: '联网检索太频繁，请稍后再试', SEARCH_DAILY_LIMIT: '已达到当日联网检索上限', SEARCH_UNSUPPORTED: '当前模型不支持官方联网检索，请切换 DeepSeek', SEARCH_NO_RESULTS: '没有检索到可用资料',
   BILI_UNAVAILABLE: 'B站检索暂时不可用，请稍后重试或先在配置中填入 Cookie',
   UNAUTHENTICATED: '需要微信登录身份', VALIDATION: '输入字段不合法', NOT_FOUND: '记录不存在或不可访问',
   CONFLICT: '记录已更新，请重新读取并确认', INVALID_REFERENCE: '关联记录无效', HAS_DEPENDENTS: '请先处理关联记录',
@@ -9,5 +10,6 @@ const messages = Object.freeze({
 });
 class DomainError extends Error { constructor(code) { super(messages[code] || messages.INTERNAL); this.code = code; } }
 const fail = code => { throw new DomainError(code); };
+const failWith = (code, message) => { const error = new DomainError(code); error.message = message || error.message; throw error; };
 const resultError = error => ({ ok: false, error: { code: error instanceof DomainError ? error.code : 'INTERNAL', message: error instanceof DomainError ? error.message : messages.INTERNAL } });
-module.exports = { DomainError, fail, resultError };
+module.exports = { DomainError, fail, failWith, resultError };

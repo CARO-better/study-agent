@@ -1,4 +1,4 @@
-> **最新接续（2026-11-07）：先读 [图片、聊天气泡与转场交接](docs/handoff-20261107-ui-followup.md)。** Surface Host 已完成：所有应用自有二级界面、操作菜单和确认/提示框统一为居中来源形变玻璃卡片；AI/模型设置与 `pages/ai` 共享圆钮几何。系统 picker/相册/分享/授权保持原生，系统返回键不接管。证据见 [Surface Host 说明](docs/releases/surface-host-20261107.md)。只在 D:/study-agent 操作，必要历史只看置顶“study-agent2”。下文与旧交接的“最新”措辞均属于历史状态，不能覆盖此入口。
+> **最新接续（2026-11-07）：先读 [图片、聊天气泡与转场交接](docs/handoff-20261107-ui-followup.md)。** Surface Host、DeepSeek 官方联网检索、模型工具循环修复和 AI 面板安全区均已完成；`api` 云函数已增量部署，真实云环境验证“北京今天天气怎么样”“今日热点”可联网回答。系统 picker/相册/分享/授权保持原生，系统返回键不接管。证据见 [联网问答说明](docs/releases/web-search-panel-inset-20261107.md)。只在 D:/study-agent 操作，必要历史只看置顶“study-agent2”。下文与旧交接的“最新”措辞均属于历史状态，不能覆盖此入口。
 
 > 最新进展请先读 [2026-11-06 修复交接](docs/handoff-20261106-repair.md) 与 [0.2.0 验证记录](docs/releases/v0.2.0.md)。以下为历史交接。
 

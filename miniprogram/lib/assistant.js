@@ -216,6 +216,17 @@ return {
         execute: async (name, args) => {
           if(this.disposed)return {store:this.store,result:{ok:false,reason:'页面已关闭，未执行操作'}};
           const current=wx.getStorageSync(KEY);if(current&&Array.isArray(current.tasks))this.store=current;
+          if(name==='web_search'){
+            const query=String(args.query||'').trim().slice(0,128);
+            if(!query)return {store:this.store,result:{ok:false,reason:'缺少搜索关键词'}};
+            if(!cloud.available())return {store:this.store,result:{ok:false,reason:'联网检索需要云开发模式'}};
+            try{
+              const data=await cloud.call('web.search',{query,count:Number(args.count)||3,ori_question:String(args.ori_question||text||'').slice(0,128)});
+              return {store:this.store,result:{ok:true,provider:data.provider,query:data.query,count:data.count,results:data.results,notice:data.notice,fetchedAt:data.fetchedAt}};
+            }catch(error){
+              return {store:this.store,result:{ok:false,reason:error.message||'联网检索暂时不可用'}};
+            }
+          }
           if(name==='recommend_resources'){
             await sync.flush();
             if(sync.status().dirty)return {store:this.store,result:{ok:false,reason:'请先解决云端同步问题'}};
@@ -278,11 +289,21 @@ return {
     this._measuringPanel=true;
     await new Promise(resolve=>setTimeout(resolve,16));
     if(this.disposed){this._measuringPanel=false;return;}
-    let windowWidth=375,windowHeight=720;
-    try{const info=wx.getWindowInfo?wx.getWindowInfo():wx.getSystemInfoSync();windowWidth=Number(info.windowWidth)||windowWidth;windowHeight=Number(info.windowHeight)||windowHeight;}catch(_){}
+    let windowWidth=375,windowHeight=720,safeBottom=0;
+    try{
+      const info=wx.getWindowInfo?wx.getWindowInfo():wx.getSystemInfoSync();
+      windowWidth=Number(info.windowWidth)||windowWidth;
+      windowHeight=Number(info.windowHeight)||windowHeight;
+      const screenHeight=Number(info.screenHeight)||windowHeight;
+      const safeAreaBottom=Number(info.safeArea&&info.safeArea.bottom)||screenHeight;
+      safeBottom=Math.max(0,Math.min(48,screenHeight-safeAreaBottom));
+    }catch(_){}
+    const navBottom=Number((this.data.shell&&this.data.shell.navBottom)||(this.properties&&this.properties.top)||44);
+    const topInset=navBottom+12;
+    const bottomInset=84+safeBottom;
     const panelWidth=Math.min(560,Math.max(280,Math.round(windowWidth*.92)));
-    const panelHeight=Math.min(760,Math.max(420,windowHeight-24));
-    const baseStyle=`width:${panelWidth}px;height:${panelHeight}px`;
+    const panelHeight=Math.min(760,Math.max(360,Math.round(windowHeight-topInset-bottomInset)));
+    const baseStyle=`width:${panelWidth}px;height:${panelHeight}px;max-height:none`;
     this.setData({panelStyle:baseStyle,panelReady:false});
     await new Promise(resolve=>setTimeout(resolve,16));
     const panelRect=await new Promise(resolve=>{
