@@ -6,3 +6,6 @@
 
 /**主题配色（深色样式）**/
 @import './style/theme/dark.wxss';
+
+/**助手气泡内使用的本地排版与材质覆盖**/
+@import './assistant-overrides.wxss';

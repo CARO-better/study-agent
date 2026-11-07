@@ -9,6 +9,7 @@ const providers = require('./providers');
 const cloud = require('./cloud');
 const sync = require('./sync');
 const KEY = 'study_trial_v1';
+const SETTINGS_CLOSE_MS = 180;
 
 // towxml 是第三方大包，加载它本身就可能抛错（体积大、依赖多、解析器在模块顶层组装）。
 // 这里的 require 必须被 try 包住：否则一旦加载失败，Page 注册整个失败，页面直接白屏，
@@ -39,9 +40,11 @@ return {
   data: {
     theme: 'light', motionEnabled: true, shell: {navBottom:44,orbTop:0},
     messages: [],
+    hasMessages: false,
     input: '',
     sending: false,
     showSettings: false,
+    settingsClosing: false,
     settings: { url: '', model: '', apiKey: '' },
     hasKey: false,
     pendingImage: '',
@@ -101,10 +104,12 @@ return {
     }
   },
   openSettings() {
+    if(this._settingsTimer){clearTimeout(this._settingsTimer);this._settingsTimer=null;}
     const settings = ai.readSettings(key => wx.getStorageSync(key));
     const matched = providers.matchPreset(settings);
     this.setData({
       showSettings: true,
+      settingsClosing: false,
       settings,
       activePreset: matched ? matched.id : 'custom',
       visionHint: matched ? matched.note : ''
@@ -119,13 +124,26 @@ return {
     const preset = providers.presetById(id);
     this.setData({ settings: providers.applyPreset(this.data.settings, id), activePreset: id, visionHint: preset ? preset.note : '' });
   },
-  closeSettings() { this.setData({ showSettings: false }); },
+  closeSettings() {
+    if(!this.data.showSettings||this.data.settingsClosing)return;
+    if(!this.data.motionEnabled){this.finishSettingsClose();return;}
+    if(this._settingsTimer)clearTimeout(this._settingsTimer);
+    this.setData({settingsClosing:true});
+    this._settingsTimer=setTimeout(()=>this.finishSettingsClose(),SETTINGS_CLOSE_MS);
+  },
+  finishSettingsClose() {
+    if(this._settingsTimer){clearTimeout(this._settingsTimer);this._settingsTimer=null;}
+    if(this.disposed)return;
+    this.setData({showSettings:false,settingsClosing:false});
+  },
   field(e) { this.setData({ [`settings.${e.currentTarget.dataset.field}`]: e.detail.value }); },
   async saveSettings() {
     wx.showLoading({title:'保存配置…',mask:true});
     try {
       const saved=await ai.persistSettings(this.data.settings,{cloudAvailable:cloud.available(),call:cloud.call,setStorage:(k,v)=>wx.setStorageSync(k,v)});
-      this.setData({settings:saved,hasKey:ai.ready(saved),showSettings:false});
+      if(this.disposed)return;
+      this.setData({settings:saved,hasKey:ai.ready(saved)});
+      this.closeSettings();
       wx.showToast({title:saved.cloudSaved?'已安全保存到云端':'已保存到本机',icon:'success'});
     } catch(error) {
       this.setData({notice:'保存失败，原配置未变：'+(error.message||error.code)});
@@ -140,12 +158,16 @@ return {
         const file = result.tempFiles && result.tempFiles[0];
         if (!file || this.disposed) return;
         wx.showLoading({title:'处理图片…',mask:true});
+        let problem='';
         try {
-          const image=await imageRequest.prepare(file);
+          const image=await imageRequest.prepare(file,wx,this);
           if(!this.disposed)this.setData({pendingImage:image});
         } catch(error) {
-          if(!this.disposed)wx.showToast({title:error.message||'图片处理失败，请裁剪后重试',icon:'none'});
-        } finally {wx.hideLoading();}
+          problem=error.message||'图片处理失败，请裁剪后重试';
+        } finally {
+          wx.hideLoading();
+          if(problem&&!this.disposed)wx.showModal({title:'图片还不能发送',content:problem,showCancel:false});
+        }
       }
     });
   },
@@ -177,9 +199,13 @@ return {
     const content = ai.buildUserContent({ text, image });
     try {
       imageRequest.check({action:'ai.chat',payload:{messages:[{role:'system',content:ai.systemPrompt({date:today(),courses:this.store.courses,tasks:this.store.tasks})},...ai.trimHistory([...this.history,{role:'user',content}])],tools:tools.TOOLS}});
-    } catch(error) {wx.showToast({title:error.message,icon:'none'});return;}
+    } catch(error) {
+      if(error.code==='PAYLOAD_TOO_LARGE')wx.showModal({title:'仍无法发送',content:error.message,showCancel:false});
+      else wx.showToast({title:error.message,icon:'none'});
+      return;
+    }
     const messages = [...this.data.messages, { role: 'user', text: text || '（图片）', image }];
-    this.setData({ messages, input: '', pendingImage: '', sending: true, notice: '' });
+    this.setData({ messages, hasMessages: true, input: '', pendingImage: '', sending: true, notice: '' });
     this.history.push({ role: 'user', content });
     try {
       const result = await ai.runAgent({
@@ -229,15 +255,20 @@ return {
       const actions = ai.describeRecords(result.records);
       const appended = [...this.data.messages, { role: 'assistant', text: result.reply || '（模型没有返回内容）', nodes: render(result.reply, this.data.theme) }];
       if (actions.length) appended.push({ role: 'system', text: actions.join('；') });
-      this.setData({ messages: appended, sending: false });
+      this.setData({ messages: appended, hasMessages: true, sending: false });
     } catch (error) {
       if(this.disposed)return;
-      this.setData({ messages: [...this.data.messages, { role: 'system', text: `出错了：${error.message}` }], sending: false });
+      this.setData({ messages: [...this.data.messages, { role: 'system', text: `出错了：${error.message}` }], hasMessages: true, sending: false });
     }
   },
   onHide(){sync.flush();},
   onShow(){appearance.paint(this.data.theme||'light');},
-  onUnload(){if(this.unbindAppearance)this.unbindAppearance();this.disposed=true;sync.flush();},
+  onUnload(){
+    if(this._settingsTimer){clearTimeout(this._settingsTimer);this._settingsTimer=null;}
+    if(this.unbindAppearance){this.unbindAppearance();this.unbindAppearance=null;}
+    this.disposed=true;
+    sync.flush();
+  },
   explainSettings(){wx.showModal({title:'模型设置',content:cloud.available()?'Key 加密保存在云端。更换服务或模型时重新填写。':'当前为本地模式，Key 保存在设备内。',showCancel:false});},
   useSuggestion(e) {this.setData({input:e.currentTarget.dataset.text});},
   onResize(){this.setData({shell:shell.layout()});},

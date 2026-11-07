@@ -5,12 +5,15 @@
   </view>
   <view wx:if="{{notice}}" class="assistant-notice">{{notice}}</view>
   <view wx:if="{{!hasKey}}" class="assistant-notice actionable" bindtap="openSettings">设置模型<image src="/assets/icons/chevron-right-{{theme}}.svg"/></view>
-  <scroll-view scroll-y class="assistant-thread" scroll-with-animation="{{motionEnabled}}" scroll-into-view="{{sending ? 'assistant-end' : ''}}">
-    <view wx:if="{{!messages.length}}" class="assistant-welcome"><study-motion wx:if="{{motionEnabled}}" id="welcome-motion" enabled="{{motionEnabled}}"/><image wx:else class="welcome-symbol" src="/assets/icons/sparkles-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></view>
+  <scroll-view scroll-y class="assistant-thread {{hasMessages ? 'has-messages' : ''}}" scroll-with-animation="{{motionEnabled}}" scroll-into-view="{{sending ? 'assistant-end' : ''}}">
+    <view wx:if="{{!hasMessages}}" class="assistant-welcome"><study-motion wx:if="{{motionEnabled}}" id="welcome-motion" enabled="{{motionEnabled && !hasMessages}}"/><image wx:else class="welcome-symbol" src="/assets/icons/sparkles-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></view>
     <view wx:for="{{messages}}" wx:key="index" class="message {{item.role}}">
       <view wx:if="{{item.image}}" class="message-image"><image src="{{item.image}}" mode="widthFix"/></view>
-      <view wx:if="{{item.role === 'assistant' && item.nodes}}" class="rich"><towxml nodes="{{item.nodes}}"/></view>
-      <view wx:elif="{{item.text}}" class="bubble">{{item.text}}</view>
+      <view wx:if="{{item.role !== 'system' && (item.nodes || item.text)}}" class="bubble">
+        <view wx:if="{{item.role === 'assistant' && item.nodes}}" class="rich"><towxml nodes="{{item.nodes}}"/></view>
+        <view wx:elif="{{item.text}}" class="bubble-copy">{{item.text}}</view>
+      </view>
+      <view wx:elif="{{item.text}}" class="bubble bubble-copy">{{item.text}}</view>
     </view>
     <view wx:if="{{sending}}" class="thinking" aria-label="AI 正在回复"><view></view><view></view><view></view></view>
     <view id="assistant-end" class="thread-end"></view>
@@ -24,7 +27,8 @@
     </view>
   </view>
 </view>
-<view wx:if="{{showSettings}}" class="overlay model-overlay">
+<canvas type="2d" id="assistant-image-canvas" class="image-processing-canvas" aria-hidden="true"></canvas>
+<view wx:if="{{showSettings || settingsClosing}}" class="overlay model-overlay {{settingsClosing ? 'model-closing' : ''}}">
   <view class="sheet glass model-sheet">
     <view class="sheet-head editor-head">
       <button class="icon-button" bindtap="closeSettings" aria-label="关闭模型设置"><image src="/assets/icons/x-{{theme}}.svg"/></button>

@@ -6,7 +6,7 @@ function panel(call) {
   const storage = {study_trial_v1:{courses:[],tasks:[],availability:[],blocks:[],unscheduled:[],previous:null},study_sync_meta_v2:{initialized:true,dirty:false,state:'synced',revision:1,generation:0}};
   let definition;
   global.wx = {getStorageSync:key=>storage[key],setStorageSync:(key,value)=>{storage[key]=structuredClone(value);},
-    getSystemInfoSync:()=>({model:'test',statusBarHeight:20}),showToast(){},showModal(options){options.success({confirm:true});},
+    getSystemInfoSync:()=>({model:'test',statusBarHeight:20}),showToast(){},showModal(options){if(options.success)options.success({confirm:true});},
     cloud:{callFunction:async({data})=>({result:await call(data.action,data.payload)})}};
   global.Component = value => {definition=value;};
   for(const file of ['../miniprogram/lib/sync','../miniprogram/lib/appearance','../miniprogram/components/assistant-panel/index'])delete require.cache[require.resolve(file)];
@@ -52,6 +52,22 @@ test('the compatibility AI screen has a working close action when opened as the 
   global.getCurrentPages=()=>[{}];
   global.wx.navigateBack=()=>calls.push('back');global.wx.reLaunch=options=>calls.push(options.url);
   h.instance.back();assert.deepEqual(calls,['/pages/today/index']);
+});
+
+test('the assistant marks its thread non-empty as soon as a message is shown',async()=>{
+  const h=panel(async()=>({ok:true,data:{message:{role:'assistant',content:'收到'}}})),p=h.instance;
+  p.store=structuredClone(h.storage.study_trial_v1);p.history=[];p.data.hasKey=true;p.data.input='你好';
+  assert.equal(p.data.hasMessages,false);
+  await p.send();
+  assert.equal(p.data.hasMessages,true);
+});
+
+test('model settings return to the assistant before the nested overlay unmounts',()=>{
+  const h=panel(async()=>({ok:true,data:null})),p=h.instance;
+  p.openSettings();assert.equal(p.data.showSettings,true);
+  p.closeSettings();assert.equal(p.data.showSettings,true);assert.equal(p.data.settingsClosing,true);
+  p.closeSettings();assert.equal(p.data.settingsClosing,true,'a repeated close must not restart the return animation');
+  p.finishSettingsClose();assert.equal(p.data.showSettings,false);assert.equal(p.data.settingsClosing,false);
 });
 
 test('oversized complete image requests keep the attachment and input without calling the cloud',async()=>{

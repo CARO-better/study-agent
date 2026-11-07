@@ -13,15 +13,48 @@ function page() {
   return {instance, navigation, choose(index) {sheet.success({tapIndex: index});}, cancel() {if (sheet.fail) sheet.fail({errMsg: 'cancel'});}};
 }
 
-test('AI opens above the current section and closes without navigating away', () => {
+test('AI closes back toward its orb only after stopping tools immediately', () => {
   const h = page(), p = h.instance;
   p.data.tab = '课程'; p.data.editing = 'course';
   p.openAI();
   assert.equal(p.data.showAssistant, true); assert.equal(p.data.editing, 'course','opening AI preserves the current unsaved form');
   assert.equal(p.data.tab, '课程'); assert.equal(h.navigation.length, 0);
-  let refreshed=0;p.onShow = () => {refreshed++;};
-  p.openAI(); assert.equal(p.data.showAssistant, false); assert.equal(p.data.tab, '课程');
-  assert.equal(refreshed,1,'closing via the persistent orb must refresh tasks changed by AI');
+  let stopped=0,refreshed=0;
+  p.selectComponent=selector=>{assert.equal(selector,'#assistant');return{beginClose(){stopped++;}};};
+  p.onShow = () => {refreshed++;};
+  p.closeAssistant();
+  assert.equal(stopped,1,'closing must block pending AI tools before the exit animation ends');
+  assert.equal(p.data.assistantClosing,true);assert.equal(p.data.showAssistant,true,'the panel remains mounted while it animates home');
+  p.closeAssistant();assert.equal(stopped,1,'a repeated close during the exit must not run cleanup twice');
+  p.finishAssistantClose();
+  assert.equal(p.data.showAssistant,false);assert.equal(p.data.assistantClosing,false);
+  assert.equal(p.data.tab, '课程');assert.equal(refreshed,1,'closing via the persistent orb must refresh tasks changed by AI');
+});
+
+test('sheets remember their source and stay mounted until the return animation finishes', () => {
+  const h = page(), p = h.instance;
+  p.openSync({detail:{x:126,y:240}});
+  assert.equal(p.data.showSync,true);assert.equal(p.data.sheetOrigin.x,126);
+  p.closeSync();
+  assert.equal(p.data.showSync,true);assert.equal(p.data.closingSheet,'sync');
+  p.finishSheetClose('sync');assert.equal(p.data.showSync,false);assert.equal(p.data.closingSheet,'');
+});
+
+test('reopening an editor during its exit cancels the stale close timer', () => {
+  const h = page(), p = h.instance;
+  p.data.store.tasks = [{id:'t1',title:'Report',status:'open',remainingMinutes:60,typeIndex:0,priorityIndex:1,courseId:''}];
+  p.refresh();
+  p.openTask({currentTarget:{dataset:{id:'t1'}},detail:{x:100,y:300}});
+  p.close();
+  p.openTask({currentTarget:{dataset:{id:'t1'}},detail:{x:100,y:300}});
+  p.finishSheetClose('editor');
+  assert.equal(p.data.editing,'task','the old editor timer must not close a newly opened draft');
+});
+
+test('reduced motion closes a sheet immediately without a spatial wait', () => {
+  const h = page(), p = h.instance;
+  p.data.motionEnabled=false;p.openSync({detail:{x:100,y:200}});p.closeSync();
+  assert.equal(p.data.showSync,false);assert.equal(p.data.closingSheet,'');
 });
 
 test('task menu dispatches the selected record and cancellation performs no mutation', () => {

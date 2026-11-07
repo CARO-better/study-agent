@@ -1,6 +1,8 @@
 @import '../../styles/assistant.wxss';
 :host { position: fixed; inset: 0; z-index: 60; }
 .assistant-appearance { min-height: 0; height: 100%; background: transparent; }
-.assistant-veil { position: absolute; inset: 0; background: rgba(0,0,0,.18); }
-.assistant-panel { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 32px; overflow: hidden; animation: panel-in .28s cubic-bezier(.2,.8,.2,1); }
-@keyframes panel-in { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.assistant-veil { position: absolute; inset: 0; background: var(--veil); animation: veil-in .2s ease-out; }
+.assistant-panel { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 32px; overflow: hidden; transform-origin: 0 0; animation: panel-from-orb .34s cubic-bezier(.2,.85,.25,1); }
+.assistant-panel.is-closing { pointer-events: none; animation: panel-to-orb .24s cubic-bezier(.5,0,.9,.4) forwards; }
+@keyframes panel-from-orb { from { opacity: 0; transform: translate(var(--panel-enter-x, 26px), var(--panel-enter-y, -72px)) scale(.08); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
+@keyframes panel-to-orb { from { opacity: 1; transform: translate(0, 0) scale(1); } to { opacity: 0; transform: translate(var(--panel-enter-x, 26px), var(--panel-enter-y, -72px)) scale(.08); } }

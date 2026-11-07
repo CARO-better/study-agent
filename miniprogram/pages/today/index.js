@@ -12,6 +12,9 @@ const INBOX_KEY = 'study_inbox_v1';
 const BACKUP_META_KEY = 'study_backup_meta_v1';
 const types = ['作业','实验','考试','其他'];
 const priorities = ['低','中','高'];
+const SHEET_CLOSE_MS = 220;
+const ASSISTANT_CLOSE_MS = 240;
+const SHEET_FLAGS = {sync:'showSync',inbox:'showInbox',resources:'showResources',editor:'editing'};
 function localDate(d) { d = d || new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function stamp(date, time) { return new Date(date+'T'+time+':00+08:00').toISOString(); }
 function display(v) { return new Date(Date.parse(v)+8*3600000).toISOString().slice(0,16).replace('T',' '); }
@@ -19,8 +22,8 @@ function fresh(){ return {courses:[],tasks:[],availability:[],blocks:[],unschedu
 function recordStamp(record){return record?JSON.stringify(Object.keys(record).sort().map(key=>[key,record[key]])):'';}
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 Page({
- data:{shell:{navBottom:44,orbTop:0},showAssistant:false,assistantSettings:false,showCompleted:false,showSync:false,theme:'light',appearanceMode:'system',appearanceOptions:[{mode:'system',label:'跟随系统'},{mode:'light',label:'浅色'},{mode:'dark',label:'深色'}],motionEnabled:true,tab:'今日',tabs:['今日','课程','计划','设置'],store:fresh(),types,priorities,courseNames:['未关联课程'],courseForm:{},taskForm:{},availabilityForm:{},editing:'',today:localDate(),typeIndex:0,priorityIndex:1,courseIndex:0,inboxMessages:[],unread:0,showInbox:false,backupAt:''},
- onLoad(){this.onResize();this.unbindAppearance=appearance.bind(this);const saved=wx.getStorageSync(KEY);this.setData({store:saved&&Array.isArray(saved.tasks)?{...fresh(),...saved}:fresh(),backupAt:this.backupLabel()});this.unsubscribe=sync.subscribe(value=>this.setData({syncStatus:value,syncTime:value.updatedAt?display(value.updatedAt):''}));this.refresh();this.refreshInbox();this.syncOnLoad();},
+ data:{shell:{navBottom:44,orbTop:0},showAssistant:false,assistantClosing:false,assistantSettings:false,showCompleted:false,showSync:false,closingSheet:'',sheetOrigin:{x:180,y:600},theme:'light',appearanceMode:'system',appearanceOptions:[{mode:'system',label:'跟随系统'},{mode:'light',label:'浅色'},{mode:'dark',label:'深色'}],motionEnabled:true,tab:'今日',tabs:['今日','课程','计划','设置'],store:fresh(),types,priorities,courseNames:['未关联课程'],courseForm:{},taskForm:{},availabilityForm:{},editing:'',today:localDate(),typeIndex:0,priorityIndex:1,courseIndex:0,inboxMessages:[],unread:0,showInbox:false,backupAt:''},
+ onLoad(){this._unloaded=false;this.onResize();this.unbindAppearance=appearance.bind(this);const saved=wx.getStorageSync(KEY);this.setData({store:saved&&Array.isArray(saved.tasks)?{...fresh(),...saved}:fresh(),backupAt:this.backupLabel()});this.unsubscribe=sync.subscribe(value=>this.setData({syncStatus:value,syncTime:value.updatedAt?display(value.updatedAt):''}));this.refresh();this.refreshInbox();this.syncOnLoad();},
  // 先用本地数据把界面渲染出来（不能等网络），再异步拉云端：云端更新就覆盖。
  // 清缓存后本地是空的，这一步会自动从云端恢复，不需要用户点任何按钮。
  async syncOnLoad(){const result=await sync.reconcile();if(result.store)this.setData({store:{...fresh(),...result.store}});this.refresh();this.refreshInbox();if(result.restored)wx.showToast({title:'已恢复完整云端数据',icon:'none'});await sync.flush();},
@@ -28,14 +31,70 @@ Page({
  chooseAppearance(e){appearance.set({mode:e.currentTarget.dataset.mode});},
  toggleMotion(e){appearance.set({motion:e.detail.value});},
  onResize(){this.setData({shell:shell.layout()});},
- openAI(){if(this.data.showAssistant){this.closeAssistant();return;}this.setData({showAssistant:true,assistantSettings:false,showInbox:false,showResources:false,showSync:false});},
- openModelSettings(){this.setData({showAssistant:true,assistantSettings:true});},
- closeAssistant(){this.setData({showAssistant:false,assistantSettings:false});this.onShow();},
+ sourcePoint(event){
+   const detail=event&&event.detail;
+   if(detail&&Number.isFinite(Number(detail.x))&&Number.isFinite(Number(detail.y)))this._sourcePoint={x:Number(detail.x),y:Number(detail.y)};
+   if(this._sourcePoint)return this._sourcePoint;
+   let width=0;try{width=Number(wx.getWindowInfo&&wx.getWindowInfo().windowWidth)||0;}catch(_){}
+   return {x:Math.round(width?width/2:180),y:600};
+ },
+ openSheet(flag,event,extra){
+   if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}
+   this._closingSheetName='';
+   this.setData({sheetOrigin:this.sourcePoint(event),closingSheet:'',[flag]:true,...(extra||{})});
+ },
+ beginSheetClose(name){
+   if(this.data.closingSheet===name)return;
+   const flag=SHEET_FLAGS[name];if(!flag||!this.data[flag])return;
+   if(!this.data.motionEnabled){this._closingSheetName=name;this.finishSheetClose(name);return;}
+   if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}
+   this._closingSheetName=name;
+   this.setData({closingSheet:name});
+   this._sheetTimer=setTimeout(()=>this.finishSheetClose(name),SHEET_CLOSE_MS);
+ },
+ finishSheetClose(name){
+   if(this._closingSheetName!==name)return;
+   if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}
+   this._closingSheetName='';
+   const flag=SHEET_FLAGS[name];if(!flag)return;
+   if(this._unloaded)return;
+   this.setData({closingSheet:'',[flag]:false});
+ },
+ openAI(){
+   if(this.data.assistantClosing)return;
+   if(this.data.showAssistant){this.closeAssistant();return;}
+   const closingEditor=this.data.closingSheet==='editor';
+   if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}
+   this._closingSheetName='';
+   this.setData({showAssistant:true,assistantClosing:false,assistantSettings:false,closingSheet:'',showInbox:false,showResources:false,showSync:false,...(closingEditor?{editing:false}:{})});
+ },
+ openModelSettings(event){
+   if(this.data.assistantClosing)return;
+   if(event)this.sourcePoint(event);
+   if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}
+   this._closingSheetName='';
+   this.setData({showAssistant:true,assistantClosing:false,assistantSettings:true,closingSheet:''});
+ },
+ closeAssistant(){
+   if(this.data.assistantClosing||!this.data.showAssistant)return;
+   const panel=this.selectComponent&&this.selectComponent('#assistant');
+   if(panel&&panel.beginClose)panel.beginClose();
+   if(!this.data.motionEnabled){this.finishAssistantClose();return;}
+   if(this._assistantTimer)clearTimeout(this._assistantTimer);
+   this.setData({assistantClosing:true});
+   this._assistantTimer=setTimeout(()=>this.finishAssistantClose(),ASSISTANT_CLOSE_MS);
+ },
+ finishAssistantClose(){
+   if(this._assistantTimer){clearTimeout(this._assistantTimer);this._assistantTimer=null;}
+   if(this._unloaded)return;
+   this.setData({showAssistant:false,assistantSettings:false,assistantClosing:false});
+   this.onShow();
+ },
  toggleCompleted(){this.setData({showCompleted:!this.data.showCompleted});},
- openSync(){this.setData({showSync:true});},closeSync(){this.setData({showSync:false});},
- quickAdd(){if(this.data.tab==='课程')this.openCourse({currentTarget:{dataset:{}}});else if(this.data.tab==='计划')wx.showActionSheet({itemList:['可用时间','固定时间'],success:r=>{if(r.tapIndex===0)this.openAvailability();if(r.tapIndex===1)this.openFixedTime();}});else if(this.data.tab==='今日')this.openTask({currentTarget:{dataset:{}}});},
- taskActions(e){const id=e.currentTarget.dataset.id;wx.showActionSheet({itemList:['编辑','复习资源','删除'],success:r=>{const event={currentTarget:{dataset:{id,kind:'task'}}};if(r.tapIndex===0)this.openTask(event);if(r.tapIndex===1)this.recommend(event);if(r.tapIndex===2)this.remove(event);}});},
- courseActions(e){const id=e.currentTarget.dataset.id;wx.showActionSheet({itemList:['编辑','删除'],success:r=>{const event={currentTarget:{dataset:{id,kind:'course'}}};if(r.tapIndex===0)this.openCourse(event);if(r.tapIndex===1)this.remove(event);}});},
+ openSync(event){this.openSheet('showSync',event);},closeSync(){this.beginSheetClose('sync');},
+ quickAdd(event){this.sourcePoint(event);if(this.data.tab==='课程')this.openCourse({currentTarget:{dataset:{}}});else if(this.data.tab==='计划')wx.showActionSheet({itemList:['可用时间','固定时间'],success:r=>{if(r.tapIndex===0)this.openAvailability();if(r.tapIndex===1)this.openFixedTime();}});else if(this.data.tab==='今日')this.openTask({currentTarget:{dataset:{}}});},
+ taskActions(e){this.sourcePoint(e);const id=e.currentTarget.dataset.id;wx.showActionSheet({itemList:['编辑','复习资源','删除'],success:r=>{const event={currentTarget:{dataset:{id,kind:'task'}}};if(r.tapIndex===0)this.openTask(event);if(r.tapIndex===1)this.recommend(event);if(r.tapIndex===2)this.remove(event);}});},
+ courseActions(e){this.sourcePoint(e);const id=e.currentTarget.dataset.id;wx.showActionSheet({itemList:['编辑','删除'],success:r=>{const event={currentTarget:{dataset:{id,kind:'course'}}};if(r.tapIndex===0)this.openCourse(event);if(r.tapIndex===1)this.remove(event);}});},
  chooseAppearanceMenu(){wx.showActionSheet({itemList:this.data.appearanceOptions.map(x=>x.label),success:r=>this.chooseAppearance({currentTarget:{dataset:{mode:this.data.appearanceOptions[r.tapIndex].mode}}})});},
  settingsMore(){wx.showActionSheet({itemList:['检测连接','预览同步内容','添加示例数据'],success:r=>{if(r.tapIndex===0)this.probeCloud();if(r.tapIndex===1)this.previewMigrate();if(r.tapIndex===2)this.sample();}});},
  saveEditor(){
@@ -56,7 +115,7 @@ Page({
  save(replan=true){let store=this.data.store;if(replan)store=planning.autoReplan(store,new Date().toISOString());sync.save(store);this.setData({store});this.refresh();this.refreshInbox();},
  // 切后台或关页面时，把还没发出去的改动立刻推上去。
  onHide(){sync.flush();},
- onUnload(){if(this.unbindAppearance)this.unbindAppearance();if(this.unsubscribe)this.unsubscribe();sync.flush();},
+ onUnload(){this._unloaded=true;if(this._sheetTimer){clearTimeout(this._sheetTimer);this._sheetTimer=null;}if(this._assistantTimer){clearTimeout(this._assistantTimer);this._assistantTimer=null;}if(this.unbindAppearance)this.unbindAppearance();if(this.unsubscribe)this.unsubscribe();sync.flush();},
  // 诊断用：只读一次 tasks.list，确认云函数部署、集合创建、身份归属三件事都通了。
  // 不改任何数据，失败时给出可执行的下一步。
  probeCloud(){ cloud.probe().then(r=>{ wx.showModal({title:r.ok?'云端已连通':'云端未连通',content:r.message+(r.hint?'\n\n下一步：'+r.hint:''),showCancel:false}); }); },
@@ -102,17 +161,17 @@ Page({
  refresh(){const s=this.data.store; const names=['未关联课程'].concat(s.courses.map(c=>c.semester+' · '+c.name)); const courseName=id=>{const c=s.courses.find(x=>x.id===id);return c?c.name:'未关联课程'}; const tasks=s.tasks.map(t=>Object.assign({},t,{courseName:courseName(t.courseId),meta:shell.taskMeta(t,courseName(t.courseId)),typeLabel:types[t.typeIndex==null?['homework','experiment','exam','other'].indexOf(t.type):t.typeIndex]||'作业',priorityLabel:priorities[t.priorityIndex==null?['low','medium','high'].indexOf(t.priority):t.priorityIndex]||'中'})); const blocks=s.blocks.map(b=>{const t=s.tasks.find(x=>x.id===b.taskId); return Object.assign({},b,{title:t?t.title:'已删除任务',timeLabel:display(b.start)+' - '+display(b.end).slice(11)});}); const reasons={overdue:'已过截止时间',no_availability:'没有可用时段',below_minimum:'剩余时间不足 30 分钟',insufficient_time:'可用时间不足'}; const unscheduled=(s.unscheduled||[]).map(u=>{const t=s.tasks.find(x=>x.id===u.taskId);return Object.assign({},u,{title:t?t.title:'任务',reasonLabel:reasons[u.reason]||u.reason});}); this.setData({courseNames:names,tasks,pendingTasks:tasks.filter(t=>t.status!=='completed'),completedTasks:tasks.filter(t=>t.status==='completed'),blocks,unscheduled,availability:s.availability,openCount:s.tasks.filter(t=>t.status!=='completed').length,completedCount:s.tasks.filter(t=>t.status==='completed').length,fixedBlocks:s.fixedBlocks||[],planMessage:s.planMessage||''});},
  switchTab(e){this.setData({tab:e.currentTarget.dataset.tab,editing:''});},
  refreshInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const base=saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(); const next=inbox.upsertDigest(base,inbox.buildDigest(this.data.store.tasks,{date:today,now:new Date().toISOString()})); wx.setStorageSync(INBOX_KEY,next); this.setData({today,inboxMessages:next.messages.map(m=>({date:m.date,summary:inbox.summaryText(m),items:m.items})),unread:inbox.unreadBadge(next,today)});},
- openInbox(){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const next=inbox.markRead(saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(),today); wx.setStorageSync(INBOX_KEY,next); this.setData({showInbox:true,unread:0});},
- closeInbox(){this.setData({showInbox:false});},
+ openInbox(event){const today=inbox.localDate(); const saved=wx.getStorageSync(INBOX_KEY); const next=inbox.markRead(saved && Array.isArray(saved.messages)?saved:inbox.emptyStore(),today); wx.setStorageSync(INBOX_KEY,next); this.openSheet('showInbox',event,{unread:0});},
+ closeInbox(){this.beginSheetClose('inbox');},
  toggleFromInbox(e){const id=e.currentTarget.dataset.id; let s=this.data.store,t=s.tasks.find(x=>x.id===id); if(!t)return; t.status=t.status==='completed'?'open':'completed';t.version=(t.version||0)+1; this.setData({store:s}); this.save();},
- openCourse(e){const id=e.currentTarget.dataset.id; const item=this.data.store.courses.find(c=>c.id===id);this.editorSource=recordStamp(item);this.setData({editing:'course',courseForm:item?Object.assign({},item,{importanceIndex:Math.max(0,['low','medium','high'].indexOf(item.importance||'medium')),masteryIndex:Math.max(0,['low','medium','high'].indexOf(item.mastery||'medium'))}):{name:'',semester:'',importance:'medium',mastery:'medium',importanceIndex:1,masteryIndex:1}});},
- openTask(e){const id=e.currentTarget.dataset.id; const item=this.data.store.tasks.find(t=>t.id===id);this.editorSource=recordStamp(item);this.editorCourseIds=JSON.stringify(this.data.store.courses.map(c=>c.id));const f=item?Object.assign({},item):{title:'',courseId:'',typeIndex:0,priorityIndex:1,dueAt:'',remainingMinutes:60,examScope:''}; let ci=this.data.store.courses.findIndex(c=>c.id===f.courseId)+1;this.setData({editing:'task',taskForm:f,typeIndex:f.typeIndex||0,priorityIndex:f.priorityIndex==null?1:f.priorityIndex,courseIndex:ci});},
- openAvailability(){this.setData({editing:'availability',availabilityForm:{date:localDate(),start:'19:00',end:'21:00'}});},
- close(){this.setData({editing:''});},
+ openCourse(e){const id=e.currentTarget.dataset.id; const item=this.data.store.courses.find(c=>c.id===id);this.editorSource=recordStamp(item);this.openSheet('editing',e,{editing:'course',courseForm:item?Object.assign({},item,{importanceIndex:Math.max(0,['low','medium','high'].indexOf(item.importance||'medium')),masteryIndex:Math.max(0,['low','medium','high'].indexOf(item.mastery||'medium'))}):{name:'',semester:'',importance:'medium',mastery:'medium',importanceIndex:1,masteryIndex:1}});},
+ openTask(e){const id=e.currentTarget.dataset.id; const item=this.data.store.tasks.find(t=>t.id===id);this.editorSource=recordStamp(item);this.editorCourseIds=JSON.stringify(this.data.store.courses.map(c=>c.id));const f=item?Object.assign({},item):{title:'',courseId:'',typeIndex:0,priorityIndex:1,dueAt:'',remainingMinutes:60,examScope:''}; let ci=this.data.store.courses.findIndex(c=>c.id===f.courseId)+1;this.openSheet('editing',e,{editing:'task',taskForm:f,typeIndex:f.typeIndex||0,priorityIndex:f.priorityIndex==null?1:f.priorityIndex,courseIndex:ci});},
+ openAvailability(){this.openSheet('editing',null,{editing:'availability',availabilityForm:{date:localDate(),start:'19:00',end:'21:00'}});},
+ close(){this.beginSheetClose('editor');},
  field(e){let obj=this.data.editing==='course'?'courseForm':this.data.editing==='task'?'taskForm':'availabilityForm'; this.setData({[obj+'.'+e.currentTarget.dataset.field]:e.detail.value});},
  chooseType(e){this.setData({typeIndex:Number(e.detail.value)});},choosePriority(e){this.setData({priorityIndex:Number(e.detail.value)});},chooseCourse(e){this.setData({courseIndex:Number(e.detail.value)});},
- saveCourse(){let f=this.data.courseForm;if(!f.name.trim()||!f.semester.trim()){wx.showToast({title:'请填写学期和课程',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.importance=['low','medium','high'][Number(f.importanceIndex)];f.mastery=['low','medium','high'][Number(f.masteryIndex)];let i=s.courses.findIndex(x=>x.id===f.id); if(i<0)s.courses.push(f);else s.courses[i]=f;this.setData({store:s,editing:''});this.save();},
- saveTask(){let f=this.data.taskForm;let minutes=Number(f.remainingMinutes);if(!f.title.trim()||!Number.isInteger(minutes)||minutes<0||minutes>10000){wx.showToast({title:'请填写标题、日期和有效分钟数',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.remainingMinutes=minutes;f.typeIndex=this.data.typeIndex;f.priorityIndex=this.data.priorityIndex;f.courseId=this.data.courseIndex?s.courses[this.data.courseIndex-1].id:'';f.type=['homework','experiment','exam','other'][f.typeIndex];f.priority=['low','medium','high'][f.priorityIndex];f.status=f.status||'open';f.version=(f.version||0)+1;let i=s.tasks.findIndex(x=>x.id===f.id);if(i<0)s.tasks.push(f);else s.tasks[i]=f;this.setData({store:s,editing:''});this.save();},
+ saveCourse(){let f=this.data.courseForm;if(!f.name.trim()||!f.semester.trim()){wx.showToast({title:'请填写学期和课程',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.importance=['low','medium','high'][Number(f.importanceIndex)];f.mastery=['low','medium','high'][Number(f.masteryIndex)];let i=s.courses.findIndex(x=>x.id===f.id); if(i<0)s.courses.push(f);else s.courses[i]=f;this.setData({store:s});this.save();this.beginSheetClose('editor');},
+ saveTask(){let f=this.data.taskForm;let minutes=Number(f.remainingMinutes);if(!f.title.trim()||!Number.isInteger(minutes)||minutes<0||minutes>10000){wx.showToast({title:'请填写标题、日期和有效分钟数',icon:'none'});return;}let s=this.data.store; f.id=f.id||uid();f.remainingMinutes=minutes;f.typeIndex=this.data.typeIndex;f.priorityIndex=this.data.priorityIndex;f.courseId=this.data.courseIndex?s.courses[this.data.courseIndex-1].id:'';f.type=['homework','experiment','exam','other'][f.typeIndex];f.priority=['low','medium','high'][f.priorityIndex];f.status=f.status||'open';f.version=(f.version||0)+1;let i=s.tasks.findIndex(x=>x.id===f.id);if(i<0)s.tasks.push(f);else s.tasks[i]=f;this.setData({store:s});this.save();this.beginSheetClose('editor');},
  saveAvailability(){
    const f=this.data.availabilityForm,weeks=Number(f.repeatWeeks||1);
    if(!f.date||!f.start||!f.end||f.start>=f.end||!Number.isInteger(weeks)||weeks<1||weeks>30){wx.showToast({title:'请填写有效时间和重复周数（1—30）',icon:'none'});return;}
@@ -122,9 +181,9 @@ Page({
      const interval={id:uid(),date:day,startTime:f.start,endTime:f.end,start:stamp(day,f.start),end:stamp(day,f.end),title:String(f.title||'固定课程/占用时间')};
      if(f.fixed){store.fixedBlocks=store.fixedBlocks||[];store.fixedBlocks.push(interval);}else store.availability.push(interval);
    }
-   this.setData({store,editing:''});this.save();
+   this.setData({store});this.save();this.beginSheetClose('editor');
  },
- openFixedTime(){this.setData({editing:'availability',availabilityForm:{date:localDate(),start:'08:00',end:'10:00',fixed:true,repeatWeeks:1,title:''}});},
+ openFixedTime(){this.openSheet('editing',null,{editing:'availability',availabilityForm:{date:localDate(),start:'08:00',end:'10:00',fixed:true,repeatWeeks:1,title:''}});},
  toggleTask(e){let s=this.data.store,t=s.tasks.find(x=>x.id===e.currentTarget.dataset.id);if(t){t.status=t.status==='completed'?'open':'completed';t.version=(t.version||0)+1;this.setData({store:s});this.save();}},
  remove(e){const kind=e.currentTarget.dataset.kind,id=e.currentTarget.dataset.id;wx.showModal({title:'确认删除？',content:kind==='course'?'关联任务会保留，但不再关联课程。':'删除后无法恢复。',success:r=>{if(!r.confirm)return;let s=this.data.store;if(kind==='task'){s.tasks=s.tasks.filter(x=>x.id!==id);s.blocks=s.blocks.filter(x=>x.taskId!==id);s.unscheduled=s.unscheduled.filter(x=>x.taskId!==id);}if(kind==='course'){s.courses=s.courses.filter(x=>x.id!==id);s.tasks.forEach(t=>{if(t.courseId===id)t.courseId='';});}if(kind==='availability')s.availability=s.availability.filter(x=>x.id!==id);if(kind==='fixed')s.fixedBlocks=(s.fixedBlocks||[]).filter(x=>x.id!==id);this.setData({store:s});this.save();}});},
  async generate(){if(this.data.planBusy)return;this.setData({planBusy:true});try{let store;if(cloud.available()){sync.save(this.data.store);store=await sync.generatePlan();}else store=planning.generate(this.data.store,new Date().toISOString());this.setData({store});if(!cloud.available())this.save(false);else{this.refresh();this.refreshInbox();}wx.showToast({title:store.planStatus==='needs_attention'?'请先处理固定安排冲突':'学习计划已生成',icon:'none'});}catch(error){wx.showModal({title:'暂时无法生成',content:error.message,showCancel:false});}finally{this.setData({planBusy:false});}},
@@ -135,10 +194,10 @@ Page({
  async recommend(e){
    if(this.data.resourceBusy)return;
    const id=e&&e.currentTarget&&e.currentTarget.dataset.id;
-   this.setData({resourceBusy:true,showResources:true,resources:[],resourceNotice:'正在检索哔哩哔哩实际课程…'});
+   this.openSheet('showResources',e,{resourceBusy:true,resources:[],resourceNotice:'正在检索哔哩哔哩实际课程…'});
    try{await sync.flush();if(sync.status().dirty)throw Error('请先完成同步，再获取对应任务的推荐');const result=await cloud.call('resources.recommendSnapshot',{taskIds:id?[id]:[],limitPerTask:4,maxTasks:3});this.setData({resources:result.results,resourceNotice:result.results.length?'来源：哔哩哔哩实时检索；点击复制原视频链接':result.note||'没有可推荐的未完成任务'});}catch(error){this.setData({resourceNotice:error.code==='BILI_UNAVAILABLE'?`${error.message||'哔哩哔哩暂时无法检索，请稍后重试'}；未生成替代链接`:error.message});}finally{this.setData({resourceBusy:false});}
  },
  copyResource(e){const url=e.currentTarget.dataset.url;if(/^https:\/\/www\.bilibili\.com\/video\/[A-Za-z0-9]+/.test(url))wx.setClipboardData({data:url});},
- closeResources(){this.setData({showResources:false});},
+ closeResources(){this.beginSheetClose('resources');},
  sample(){wx.showModal({title:'添加示例数据？',content:'会在当前数据中添加标注为示例的课程、任务和明日可用时间。',success:r=>{if(!r.confirm)return;let s=this.data.store;let d=new Date();d.setDate(d.getDate()+1);let date=localDate(d),id=uid();s.courses.push({id,name:'示例课程',semester:'示例学期'});s.tasks.push({id:uid(),title:'示例实验报告',courseId:id,typeIndex:1,priorityIndex:1,type:'experiment',priority:'medium',dueAt:date,remainingMinutes:60,status:'open',version:1});s.availability.push({id:uid(),date,startTime:'19:00',endTime:'21:00',start:stamp(date,'19:00'),end:stamp(date,'21:00')});this.setData({store:s});this.save();}});}
 });

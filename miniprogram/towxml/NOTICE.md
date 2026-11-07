@@ -19,6 +19,8 @@
 
 `decode.json` 里用的是绝对路径 `/towxml/...`，因此**这个目录必须放在 `miniprogram/towxml`**，改名或移动会导致组件找不到。
 
+本项目在 `towxml.wxss` 末尾额外引入 `assistant-overrides.wxss`，只覆盖助手气泡内的字体、圆角内材质、链接与表格配色。原因是页面或外层组件样式无法稳定穿透 Towxml 的组件边界；覆盖文件不改变 Towxml 解析逻辑，也不改变上方 MIT 许可。
+
 ## MIT License
 
 Copyright (c) Towxml contributors
