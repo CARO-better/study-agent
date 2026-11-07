@@ -1,12 +1,12 @@
 <view class="assistant-layout">
   <view class="assistant-head">
     <view class="assistant-name">AI</view>
-    <button class="icon-button" bindtap="openSettings" aria-label="模型设置"><image src="/assets/icons/settings-2-{{theme}}.svg"/></button>
+    <button id="assistant-settings-anchor" class="icon-button" bindtap="openSettings" aria-label="模型设置"><image src="/assets/icons/settings-2-{{theme}}.svg"/></button>
   </view>
   <view wx:if="{{notice}}" class="assistant-notice">{{notice}}</view>
   <view wx:if="{{!hasKey}}" class="assistant-notice actionable" bindtap="openSettings">设置模型<image src="/assets/icons/chevron-right-{{theme}}.svg"/></view>
   <scroll-view scroll-y class="assistant-thread {{hasMessages ? 'has-messages' : ''}}" scroll-with-animation="{{motionEnabled}}" scroll-into-view="{{sending ? 'assistant-end' : ''}}">
-    <view wx:if="{{!hasMessages}}" class="assistant-welcome"><study-motion wx:if="{{motionEnabled}}" id="welcome-motion" enabled="{{motionEnabled && !hasMessages}}"/><image wx:else class="welcome-symbol" src="/assets/icons/sparkles-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></view>
+    <view wx:if="{{!hasMessages && !showSettings && !settingsClosing}}" class="assistant-welcome"><study-motion wx:if="{{motionEnabled}}" id="welcome-motion" enabled="{{motionEnabled && !hasMessages}}"/><image wx:else class="welcome-symbol" src="/assets/icons/sparkles-{{theme === 'dark' ? 'blue-dark' : 'blue'}}.svg"/></view>
     <view wx:for="{{messages}}" wx:key="index" class="message {{item.role}}">
       <view wx:if="{{item.image}}" class="message-image"><image src="{{item.image}}" mode="widthFix"/></view>
       <view wx:if="{{item.role !== 'system' && (item.nodes || item.text)}}" class="bubble">

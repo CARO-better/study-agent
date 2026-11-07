@@ -2,7 +2,13 @@
 :host { position: fixed; inset: 0; z-index: 60; }
 .assistant-appearance { min-height: 0; height: 100%; background: transparent; }
 .assistant-veil { position: absolute; inset: 0; background: var(--veil); animation: veil-in .2s ease-out; }
-.assistant-panel { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 32px; overflow: hidden; transform-origin: 0 0; animation: panel-from-orb .34s cubic-bezier(.2,.85,.25,1); }
-.assistant-panel.is-closing { pointer-events: none; animation: panel-to-orb .24s cubic-bezier(.5,0,.9,.4) forwards; }
-@keyframes panel-from-orb { from { opacity: 0; transform: translate(var(--panel-enter-x, 26px), var(--panel-enter-y, -72px)) scale(.08); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
-@keyframes panel-to-orb { from { opacity: 1; transform: translate(0, 0) scale(1); } to { opacity: 0; transform: translate(var(--panel-enter-x, 26px), var(--panel-enter-y, -72px)) scale(.08); } }
+.assistant-center { position: absolute; inset: 0; box-sizing: border-box; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.assistant-panel { position: relative; box-sizing: border-box; width: 92vw; max-width: 560px; height: 760px; max-height: 86%; min-height: 0; border-radius: 32px; overflow: hidden; transform-origin: top left; opacity: 0; pointer-events: auto; }
+.assistant-panel.panel-ready { opacity: 1; animation: panel-from-orb .34s cubic-bezier(.2,.85,.25,1); }
+.assistant-panel.is-closing { opacity: .35; pointer-events: none; animation: panel-to-orb .24s cubic-bezier(.5,0,.9,.4) forwards; }
+.assistant-panel.panel-ready .assistant-layout { animation: assistant-content-in .22s ease-out .1s both; }
+.assistant-panel.is-closing .assistant-layout { animation: assistant-content-out .1s ease-in both; }
+@keyframes panel-from-orb { from { opacity: .28; transform: var(--panel-enter-transform, translate(26px, -72px) scale(.08)); border-radius: var(--panel-enter-radius, 22px); } to { opacity: 1; transform: translate(0, 0) scale(1, 1); border-radius: 32px; } }
+@keyframes panel-to-orb { from { opacity: 1; transform: translate(0, 0) scale(1, 1); border-radius: 32px; } to { opacity: 0; transform: var(--panel-enter-transform, translate(26px, -72px) scale(.08)); border-radius: var(--panel-enter-radius, 22px); } }
+@keyframes assistant-content-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes assistant-content-out { from { opacity: 1; } to { opacity: 0; } }

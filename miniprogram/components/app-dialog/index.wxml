@@ -1,0 +1,19 @@
+<view wx:if="{{visible}}" class="dialog-root phase-{{phase}}" catchtouchmove="stopTouch">
+  <view class="dialog-veil" bindtap="onDismiss"></view>
+  <view class="dialog-positioner" style="padding-bottom:calc(12px + env(safe-area-inset-bottom) + {{keyboardHeight}}px)">
+    <view class="dialog-card glass" style="{{cardStyle}}" catchtap="stopTouch">
+      <view class="dialog-content-wrap">
+        <view class="dialog-title" wx:if="{{request.title}}">{{request.title}}</view>
+        <view class="dialog-copy" wx:if="{{request.content}}">{{request.content}}</view>
+        <input wx:if="{{request.editable}}" class="dialog-input" value="{{draft}}" placeholder="{{request.placeholderText || ''}}" bindinput="onInput" confirm-type="done" adjust-position="{{false}}"/>
+        <view wx:if="{{request.type === 'menu'}}" class="dialog-menu">
+          <button wx:for="{{request.items}}" wx:key="index" class="dialog-menu-row" data-index="{{index}}" bindtap="onMenuTap">{{item.label || item}}</button>
+        </view>
+        <view wx:if="{{request.type !== 'menu'}}" class="dialog-actions">
+          <button wx:if="{{request.type !== 'alert' && request.showCancel !== false}}" class="dialog-btn" bindtap="onCancel">{{request.cancelText || '取消'}}</button>
+          <button class="dialog-btn primary {{request.destructive ? 'danger' : ''}}" bindtap="onConfirm">{{request.confirmText || '确定'}}</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

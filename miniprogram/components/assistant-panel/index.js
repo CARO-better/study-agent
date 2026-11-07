@@ -24,6 +24,9 @@ Component({
       controller.onLoad.call(this);
       if (this.properties.settingsOpen) this.openSettings();
     },
+    ready() {
+      if (this.measurePanel) this.measurePanel();
+    },
     detached() {controller.onUnload.call(this);}
   },
   pageLifetimes: {hide() {controller.onHide.call(this);}}

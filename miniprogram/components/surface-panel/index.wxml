@@ -1,0 +1,8 @@
+<view wx:if="{{visible}}" class="surface-root phase-{{phase}}" catchtouchmove="stopTouch">
+  <view class="surface-veil" bindtap="onDismiss"></view>
+  <view class="surface-positioner" style="padding-bottom:calc(12px + env(safe-area-inset-bottom) + {{keyboardHeight}}px)">
+    <view class="surface-card glass size-{{size}}" style="{{cardStyle}}" catchtap="stopTouch">
+      <view class="surface-content"><slot/></view>
+    </view>
+  </view>
+</view>

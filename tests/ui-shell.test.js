@@ -33,10 +33,12 @@ test('AI closes back toward its orb only after stopping tools immediately', () =
 
 test('sheets remember their source and stay mounted until the return animation finishes', () => {
   const h = page(), p = h.instance;
+  let began=false;
+  p.selectComponent=()=>({beginClose(){began=true;}});
   p.openSync({detail:{x:126,y:240}});
   assert.equal(p.data.showSync,true);assert.equal(p.data.sheetOrigin.x,126);
   p.closeSync();
-  assert.equal(p.data.showSync,true);assert.equal(p.data.closingSheet,'sync');
+  assert.equal(p.data.showSync,true);assert.equal(p.data.closingSheet,'sync');assert.equal(began,true);
   p.finishSheetClose('sync');assert.equal(p.data.showSync,false);assert.equal(p.data.closingSheet,'');
 });
 
@@ -57,27 +59,27 @@ test('reduced motion closes a sheet immediately without a spatial wait', () => {
   assert.equal(p.data.showSync,false);assert.equal(p.data.closingSheet,'');
 });
 
-test('task menu dispatches the selected record and cancellation performs no mutation', () => {
+test('task menu dispatches the selected record and cancellation performs no mutation', async () => {
   const h = page(), p = h.instance, calls = [];
   assert.equal(typeof p.taskActions, 'function');
   p.openTask = event => calls.push(['edit', event.currentTarget.dataset.id]);
   p.recommend = event => calls.push(['resources', event.currentTarget.dataset.id]);
   p.remove = event => calls.push(['delete', event.currentTarget.dataset.kind, event.currentTarget.dataset.id]);
   const event = {currentTarget: {dataset: {id: 'task-7'}}};
-  p.taskActions(event); h.cancel(); assert.deepEqual(calls, []);
-  p.taskActions(event); h.choose(0);
-  p.taskActions(event); h.choose(1);
-  p.taskActions(event); h.choose(2);
+  let pending = p.taskActions(event); h.cancel(); await pending;
+  pending = p.taskActions(event); h.choose(0); await pending;
+  pending = p.taskActions(event); h.choose(1); await pending;
+  pending = p.taskActions(event); h.choose(2); await pending;
   assert.deepEqual(calls, [['edit', 'task-7'], ['resources', 'task-7'], ['delete', 'task', 'task-7']]);
 });
 
-test('quick add follows the current section and plan creation offers both time types', () => {
+test('quick add follows the current section and plan creation offers both time types', async () => {
   const h = page(), p = h.instance, calls = [];
   assert.equal(typeof p.quickAdd, 'function');
   p.openTask = () => calls.push('task'); p.openCourse = () => calls.push('course');
   p.openAvailability = () => calls.push('available'); p.openFixedTime = () => calls.push('fixed');
-  p.data.tab = '今日'; p.quickAdd(); p.data.tab = '课程'; p.quickAdd();
-  p.data.tab = '计划'; p.quickAdd(); h.choose(0); p.quickAdd(); h.choose(1);
+  p.data.tab = '今日'; await p.quickAdd(); p.data.tab = '课程'; await p.quickAdd();
+  p.data.tab = '计划'; let pending = p.quickAdd(); h.choose(0); await pending; pending = p.quickAdd(); h.choose(1); await pending;
   assert.deepEqual(calls, ['task', 'course', 'available', 'fixed']);
 });
 

@@ -31,8 +31,8 @@
 .image-processing-canvas { position: fixed; left: 12px; top: 12px; width: 1px; height: 1px; opacity: .01; pointer-events: none; z-index: -1; }
 .rich, .rich towxml { display: block; box-sizing: border-box; min-width: 0; max-width: 100%; }
 .rich { overflow-x: auto; overflow-y: hidden; }
-.model-overlay { position: absolute; z-index: 5; border-radius: inherit; animation: model-veil-in .2s ease-out; }
-.model-sheet { max-height: 100%; transform-origin: calc(100% - 40px) 100%; animation: model-sheet-in .26s cubic-bezier(.2,.8,.2,1); }
+.model-overlay { position: absolute; inset: 0; z-index: 5; border-radius: inherit; display: flex; align-items: center; justify-content: center; padding: 12px; background: var(--veil); animation: model-veil-in .2s ease-out; }
+.model-sheet { width: 88%; max-width: 460px; max-height: 88%; border-radius: 28px; transform-origin: calc(100% - 40px) 20px; animation: model-sheet-in .26s cubic-bezier(.2,.8,.2,1); }
 .model-overlay.model-closing { pointer-events: none; animation: model-veil-out .18s ease-in forwards; }
 .model-overlay.model-closing .model-sheet { animation: model-sheet-out .18s cubic-bezier(.55,0,1,.45) forwards; }
 @keyframes model-veil-in { from { opacity: 0; } to { opacity: 1; } }

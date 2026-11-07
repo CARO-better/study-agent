@@ -1,4 +1,7 @@
 <view class="appearance theme-{{theme}} {{motionEnabled ? '' : 'reduce-motion'}}">
-  <button class="ai-orb glass icon-button" style="top:{{shell.orbTop}}px" bindtap="back" aria-label="关闭 AI 助手"><image src="/assets/icons/x-{{theme}}.svg"/></button>
-  <view class="standalone-assistant" style="top:{{shell.navBottom + 8}}px"><include src="../../templates/assistant.wxml"/></view>
+  <button id="assistant-orb" class="ai-orb glass icon-button" style="top:{{shell.orbTop}}px" bindtap="back" aria-label="关闭 AI 助手"><image src="/assets/icons/x-{{theme}}.svg"/></button>
+  <view class="standalone-center">
+    <view class="standalone-assistant assistant-panel glass {{panelReady ? 'panel-ready' : ''}}" style="{{panelStyle}}"><include src="../../templates/assistant.wxml"/></view>
+  </view>
+  <app-dialog motion-enabled="{{motionEnabled}}"/>
 </view>

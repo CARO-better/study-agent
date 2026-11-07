@@ -1,7 +1,9 @@
 {
   "navigationBarTitleText": "学程",
   "usingComponents": {
-    "assistant-panel": "/components/assistant-panel/index"
+    "app-dialog": "/components/app-dialog/index",
+    "assistant-panel": "/components/assistant-panel/index",
+    "surface-panel": "/components/surface-panel/index"
   },
   "navigationStyle": "custom"
 }

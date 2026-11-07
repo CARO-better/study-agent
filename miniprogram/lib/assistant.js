@@ -7,7 +7,9 @@ const shell = require('./shell');
 const tools = require('./tools');
 const providers = require('./providers');
 const cloud = require('./cloud');
+const surface = require('./surface-bus');
 const sync = require('./sync');
+const morph = require('./morph');
 const KEY = 'study_trial_v1';
 const SETTINGS_CLOSE_MS = 180;
 
@@ -45,6 +47,8 @@ return {
     sending: false,
     showSettings: false,
     settingsClosing: false,
+    panelStyle: '',
+    panelReady: false,
     settings: { url: '', model: '', apiKey: '' },
     hasKey: false,
     pendingImage: '',
@@ -79,6 +83,7 @@ return {
       this.setData({ notice: `富文本排版不可用，已降级为纯文本（${towxmlError}）` });
     }
     this.checkCloudProvider();
+    setTimeout(()=>{if(this.measurePanel)this.measurePanel();},0);
   },
   // 云端若已存过加密的 Key，清缓存后本地空了也能直接用 —— 界面按「已配置」处理。
   async checkCloudProvider() {
@@ -166,24 +171,21 @@ return {
           problem=error.message||'图片处理失败，请裁剪后重试';
         } finally {
           wx.hideLoading();
-          if(problem&&!this.disposed)wx.showModal({title:'图片还不能发送',content:problem,showCancel:false});
+          if(problem&&!this.disposed)surface.alert({title:'图片还不能发送',content:problem,showCancel:false});
         }
       }
     });
   },
   clearImage() { this.setData({ pendingImage: '' }); },
   input(e) { this.setData({ input: e.detail.value }); },
-  confirmDelete(task) {
-    return new Promise((resolve) => {
-      wx.showModal({
-        title: '删除任务？',
-        content: `「${task.title}」删除后无法恢复。`,
-        confirmText: '删除',
-        confirmColor: '#D64545',
-        success: result => resolve(Boolean(result.confirm)),
-        fail: () => resolve(false)
-      });
+  async confirmDelete(task) {
+    const result=await surface.confirm({
+      title:'删除任务？',
+      content:`「${task.title}」删除后无法恢复。`,
+      confirmText:'删除',
+      destructive:true
     });
+    return Boolean(result.confirm);
   },
   async send() {
     if(this.data.sending)return;
@@ -200,7 +202,7 @@ return {
     try {
       imageRequest.check({action:'ai.chat',payload:{messages:[{role:'system',content:ai.systemPrompt({date:today(),courses:this.store.courses,tasks:this.store.tasks})},...ai.trimHistory([...this.history,{role:'user',content}])],tools:tools.TOOLS}});
     } catch(error) {
-      if(error.code==='PAYLOAD_TOO_LARGE')wx.showModal({title:'仍无法发送',content:error.message,showCancel:false});
+      if(error.code==='PAYLOAD_TOO_LARGE')surface.alert({title:'仍无法发送',content:error.message,showCancel:false});
       else wx.showToast({title:error.message,icon:'none'});
       return;
     }
@@ -223,7 +225,7 @@ return {
             sync.save(this.store);try{this.store=await sync.generatePlan();return {store:this.store,result:{ok:this.store.planStatus!=='needs_attention',blocks:this.store.blocks,unscheduled:this.store.unscheduled,reason:this.store.planMessage}};}catch(error){return {store:this.store,result:{ok:false,reason:error.message}};}
           }
           if(name==='create_task'||name==='create_course'){
-            const approved=await new Promise(resolve=>wx.showModal({title:'确认 AI 整理结果',content:name==='create_task'?`任务：${args.title||''}\n课程：${args.courseName||'未关联'}\n截止：${args.dueAt||'未提供'}\n预计：${args.remainingMinutes||60} 分钟（估算，可修改）`:`课程：${args.name||''}\n学期：${args.semester||'未提供'}`,success:r=>resolve(Boolean(r.confirm)),fail:()=>resolve(false)}));
+            const approved=(await surface.confirm({title:'确认 AI 整理结果',content:name==='create_task'?`任务：${args.title||''}\n课程：${args.courseName||'未关联'}\n截止：${args.dueAt||'未提供'}\n预计：${args.remainingMinutes||60} 分钟（估算，可修改）`:`课程：${args.name||''}\n学期：${args.semester||'未提供'}`,confirmText:'确认添加',cancelText:'取消'})).confirm;
             if(!approved)return {store:this.store,result:{ok:false,reason:'用户取消保存，未创建数据'}};
             if(this.disposed)return {store:this.store,result:{ok:false,reason:'页面已关闭，未创建数据'}};
             const current=wx.getStorageSync(KEY);if(current&&Array.isArray(current.tasks))this.store=current;
@@ -269,8 +271,41 @@ return {
     this.disposed=true;
     sync.flush();
   },
-  explainSettings(){wx.showModal({title:'模型设置',content:cloud.available()?'Key 加密保存在云端。更换服务或模型时重新填写。':'当前为本地模式，Key 保存在设备内。',showCancel:false});},
+  explainSettings(){surface.alert({title:'模型设置',content:cloud.available()?'Key 加密保存在云端。更换服务或模型时重新填写。':'当前为本地模式，Key 保存在设备内。',showCancel:false,anchorSelector:'#assistant-settings-anchor'});},
   useSuggestion(e) {this.setData({input:e.currentTarget.dataset.text});},
+  async measurePanel(){
+    if(this._measuringPanel||this._panelMeasured)return;
+    this._measuringPanel=true;
+    await new Promise(resolve=>setTimeout(resolve,16));
+    if(this.disposed){this._measuringPanel=false;return;}
+    let windowWidth=375,windowHeight=720;
+    try{const info=wx.getWindowInfo?wx.getWindowInfo():wx.getSystemInfoSync();windowWidth=Number(info.windowWidth)||windowWidth;windowHeight=Number(info.windowHeight)||windowHeight;}catch(_){}
+    const panelWidth=Math.min(560,Math.max(280,Math.round(windowWidth*.92)));
+    const panelHeight=Math.min(760,Math.max(420,windowHeight-24));
+    const baseStyle=`width:${panelWidth}px;height:${panelHeight}px`;
+    this.setData({panelStyle:baseStyle,panelReady:false});
+    await new Promise(resolve=>setTimeout(resolve,16));
+    const panelRect=await new Promise(resolve=>{
+      const query=(this.createSelectorQuery&&this.createSelectorQuery())||(wx.createSelectorQuery&&wx.createSelectorQuery());
+      if(!query)return resolve(null);
+      let settled=false;const timer=setTimeout(()=>{if(!settled){settled=true;resolve(null);}},120);
+      query.select('.assistant-panel').boundingClientRect(rect=>{if(!settled){settled=true;clearTimeout(timer);resolve(rect||null);}}).exec();
+    });
+    const sourceRect=await new Promise(resolve=>{
+      const query=wx.createSelectorQuery&&wx.createSelectorQuery();
+      if(!query)return resolve(null);
+      let settled=false;const timer=setTimeout(()=>{if(!settled){settled=true;resolve(null);}},120);
+      query.select('#assistant-orb').boundingClientRect(rect=>{if(!settled){settled=true;clearTimeout(timer);resolve(rect||null);}}).exec();
+    });
+    if(this.disposed){this._measuringPanel=false;return;}
+    const source=sourceRect&&Number(sourceRect.width)>0?{...sourceRect,radius:22}:morph.fallbackRect();
+    const target=panelRect&&Number(panelRect.width)>0?panelRect:{left:0,top:0,width:panelWidth,height:panelHeight};
+    const transform=morph.transform(source,target);
+    this._panelTransform=transform;
+    this.setData({panelReady:true,panelStyle:`${baseStyle};--panel-enter-transform:${morph.transformStyle(transform)};--panel-enter-radius:${transform.radius}px`});
+    this._panelMeasured=true;
+    this._measuringPanel=false;
+  },
   onResize(){this.setData({shell:shell.layout()});},
   back() { if(getCurrentPages().length>1)wx.navigateBack();else wx.reLaunch({url:'/pages/today/index'}); }
 };

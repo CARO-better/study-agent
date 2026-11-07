@@ -1,0 +1,17 @@
+.surface-root { position: fixed; inset: 0; z-index: 100; }
+.surface-veil { position: absolute; inset: 0; background: var(--veil); animation: surface-veil-in .18s ease-out; }
+.surface-positioner { position: absolute; inset: 0; box-sizing: border-box; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; }
+.surface-card { position: relative; box-sizing: border-box; width: 92vw; max-width: 560px; max-height: 86%; min-height: 0; display: flex; flex-direction: column; border-radius: 28px; overflow: hidden; transform-origin: top left; }
+.surface-card.size-compact { max-width: 460px; }
+.surface-card.size-form { max-width: 560px; }
+.surface-content { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.surface-card .sheet-body { flex: 1; min-height: 0; }
+.surface-card.phase-measuring { visibility: hidden; opacity: 0; }
+.surface-card.phase-entering { opacity: .82; transform: var(--morph-transform); border-radius: var(--morph-radius, 16px); transition: none; }
+.surface-card.phase-open { opacity: 1; transform: translate(0, 0) scale(1, 1); border-radius: 28px; transition: transform .34s cubic-bezier(.2,.85,.25,1), border-radius .34s cubic-bezier(.2,.85,.25,1), opacity .18s ease-out; }
+.surface-card.phase-closing { opacity: .28; transform: var(--morph-transform); border-radius: var(--morph-radius, 16px); transition: transform .28s cubic-bezier(.55,0,.9,.45), border-radius .28s cubic-bezier(.55,0,.9,.45), opacity .22s ease-in; }
+.surface-content { opacity: 1; transition: opacity .16s ease-out .12s; }
+.surface-card.phase-entering .surface-content, .surface-card.phase-closing .surface-content { opacity: 0; transition: opacity .1s ease-in; }
+.surface-root.phase-closing .surface-veil { pointer-events: none; animation: surface-veil-out .22s ease-in forwards; }
+@keyframes surface-veil-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes surface-veil-out { from { opacity: 1; } to { opacity: 0; } }

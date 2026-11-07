@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "AI 助理",
   "usingComponents": {
+    "app-dialog": "/components/app-dialog/index",
     "towxml": "/towxml/towxml",
     "study-motion": "/components/study-motion/index"
   },
